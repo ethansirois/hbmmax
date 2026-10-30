@@ -1,0 +1,640 @@
+---
+title: "A100 HBM Saturation with Minimal SMs"
+author:
+    - name: "Ethan Sirois"
+      email: "ethansirois3@gmail.com"
+author-title: ""
+format:
+  html:
+    theme: cosmo
+    toc: true
+    toc-location: left
+    number-sections: true
+    code-copy: true
+    link-external-newwindow: true
+    output-file: index.html
+---
+
+#### Note: {.unnumbered}
+This was *NOT* written with the assistance of an LLM. I thought-out and typed every single character. I hope that this is more digestable than most recent technical writing.\
+For the purposes of learning, these ideas are also mine. I did use LLMs to help with formatting `asm` instructions and clarifying cache behaviors.
+
+I try to verify facts, observations, and ideas, but I may make mistakes. **Please [inform me](mailto:ethansirois3@gmail.com)** of any incorrect information (or differing opinions)!
+
+## Introduction
+
+The goal of this work is to see how few SMs we can use to saturate the HBM of an A100, and explain hardware fundamentals along the way.
+
+## Background
+
+This problem is interesting to me for several reasons.
+
+First, its relevance (to me) comes from the fact that we see an emergence of *warp-specialization* in performant GPU kernels, i.e., where we have a group of *producer* warps that solely focus on transporting data to the GPU (shared memory, tensor memory), and a group of *consumer* warps that focus on using transported data for computation (and also do the write-back, since that is cheap).\
+Thus, if we can keep our producer warps as light as possible (only one SM per GPC, or most ideally, one light-weight warp per SM), this frees up many valuable resources (registers) for our consumer warp groups.
+
+Second, I love optimizing things in constrained environments. It's like a puzzle that tests your understanding of the problem and the hardware (and compiler and operating system), and it requires you to be conscious about every single instruction that executes. (This is why I love programming in RISC ISAs[^1] and C.)\
+
+[^1]: CISC has more hope in a post-LLM world, but I would argue that historically, CISC ISAs are very difficult to fully utilize. For the compiler, it's incredibly difficult to lower a program to the optimal CISC instructions, as it's hard to preserve/recognize groups of instructions such that they retain the higher-level semantics that niche CISC instructions require. And as an assembly programmer, I also feel that it requires so much knowledge and devotion to one generation/extension of an ISA. *"Here, just read [our 2,500-page volume](https://cdrdv2.intel.com/v1/dl/getContent/671200?_gl=1*nyn5ko*_ga*MTM0NDY5Mjg4My4xNzkzMTE2MDM5*_ga_HVBGF9XT5H*czE3OTMxMTYwMzgkbzEkZzEkdDE3OTMxMTYwNTEkajQ3JGwwJGgw) on the instructions that we support!"*\
+    This isn't even touching on the chip area (and thus power consumption) that's required to have this many specialized units.\
+    As you can tell, I'm extremely pleased that RISC ISAs have taken the lead.
+
+## Strategies
+
+This first set of kernels has the objective of saturating the HBM with as little SMs as possible
+
+### Kernel k0 --- straightforward
+
+For a simple kernel that doesn't utilize any special PTX instructions, the following was clear to me:
+
+- We want to do the most simple thing, a vector "memcpy", i.e., `B[i] = A[i] for i in [0..n-1]`
+- Most obviously, we want our intra-warp memory accesses to be coalesced (and generally coalesced inter-warp[^2])
+  - We can achieve this via each thread accessing a contiguous 16-byte (`float4`) element based on `threadIdx.x`. Then, a warp accesses $16 \times 32 = 512$ contiguous bytes
+- We want to maximally utilize the registers of our SMs
+  - Each four-register group (because each register is 32-bits and we are using `float4` which grabs four contiguous `fp32`) can be used to load data. Thus, outside of setting aside some registers for our pointers and address calculation, we want to maximize the number of four-register groups that have pending data in-flight from global memory
+- We want one, persistent block per SM
+  - Having multiple blocks per-SM is pointless, and makes our SM-counting very difficult, so let's use one block per SM. Plus, one persistent block is much more performant, since a new block has to awkwardly fill the empty pipeline with loads before it can start issuing stores. One persistent block can continuously load future data while issuing stores (yay pipelining!)
+- It's easier to let the compiler optimize things if everything is a constant expression (known at compile-time), and for simplicity (and performance), everything is a power-of-two
+  - This means compile-time vector length, which unrolls the copy loop, which creates compile-time address offsets (SASS supports constant address offsets up to )
+- We want each thread to have the maximum number of registers (255)
+  - Maximal register usage per-thread will allow for the least warp-switching, and more-importantly, means the less redundancy of storing arguments (since each thread needs the pointers in its own registers)
+  - Modern SMs have 64K registers per SM, so with a limit of 255 registers per thread, this gives $\frac{64 \times 1024}{256} = 256$ threads per SM
+
+[^2]: Global memory bank/channel conflicts are very confusing, and it is nearly impossible to understand because the hardware implements some kind of hashing to global memory addresses. The hashing is implemented quite well though, so we don't really have to concern ourselves with this. (For both points, see [here](https://forums.developer.nvidia.com/t/partition-camping-on-newer-architectures-long-scoreboard/72689).) But we are still recommended to generally access global memory in order (even though this hashing also handles cases of using large strides).\
+    For example, I was able to find that on a 3070, we only observe a slowdown when our memory addresses are equal $\mod 2^{15}$ (10% slowdown). I did not observe any slowdown with smaller gaps.
+
+With all of this in place, we can get to the following simple kernel:
+
+``` c++
+constexpr int SMALL_NUM_STEPS = NUM_THREAD_BLOCKS_NEEDED / SMALL_SMs_USED;
+
+__global__ void
+small_SMs(const float4* __restrict__ dA, float4* __restrict__ dB) {
+    constexpr int step = BLOCKS_PER_SM * SMALL_SMs_USED * THREADS_PER_BLOCK;
+    const int idx = blockIdx.x * THREADS_PER_BLOCK + threadIdx.x;
+
+    #pragma unroll
+    for (int i = 0; i < SMALL_NUM_STEPS; ++i) {
+        dB[i * step + idx] = dA[i * step + idx];
+    }
+}
+```
+
+So nice and simple. (You can see that I love compiler hints; we'll see the emergence of more hints later.)
+
+#### Idea 
+What about enqueuing multiple loads before then trying to store? E.g., instead of `load A[0], store A[0], load A[1], store A[1]`, we can do `load A[0], load A[1], store A[0], store A[1]`, as this separates dependencies?\
+Thankfully, the compiler will handle this for us when generating the SASS! (This is called instruction scheduling.)
+
+#### Expectation {#k0_expectation}
+
+Let's run some back-of-the-envelope math (what inspired this). Resources suggest that:
+
+- An HBM request takes \~500 core cycles
+- An A100 has 80 memory channels, each channel serving many banks
+- To fully saturate a channel, you should have \~21 128B requests per channel (because it's heavily pipelined)
+
+*Note:* \ I decided to pause my deep-dive on the HBM2 internals (via [the open-standard](https://www.jedec.org/sites/default/files/docs/JESD235D.pdf)) to get through the rest of this, but this is safely an over-approximation of what the A100 is capable of. This section just gives a very general idea of expectation, but it intentionally lacks specifics (until I learn more).
+
+Thus, we can determine that we need $21 \times 128 \times 80$ bytes being simultaneously served over 500 clock cycles.
+
+So with each thread containing 255 registers, say it uses 248 for memory operations, then each thread can contribute $248 \times 4$ bytes. With this being vectorized into 4, we issue 62 instructions to achieve this, and with pipelining, it *seems* reasonable to expect this to execute within 500 cycles.
+
+This then implies that we only need $\frac{21 \times 128 \times 80}{248 \times 4} < \frac{21 \times 128 \times 80}{21 \times 4 \times 11} < 32 \times 8 = 256$ threads, which can fit into a single SM!
+
+Except this is only going to saturate the HBM for one memory cycle.
+Let's break it down.\
+From a single SM's perspective, it will take one memory cycle to prepare the DRAM and then one memory cycle of full utilization to get the data it requested. It will then send data to store and then follow this up with another load.\
+But the store will require one memory cycle to get ready, so we can see that a single SM saturates the HBM every-other memory cycle. This implies that we would require two SMs to fully saturate the HBM (besides the first memory cycle, which will always be empty).
+
+This makes two key (and false) assumptions about memory:
+
+\(1) The actual transfer of data between the SM and DRAM is instantaneous, but it requires one memory cycle for it to actually be read/written from/into the DRAM.\
+\(2) There is no limit to how many memory requests an SM can issue and how much data it can await/outstanding.
+
+I think that (1) is not too inaccurate in terms of data transportation speed, but I know that it is especially limited by the fact that each bus can only tranport data *unidirectionally*, i.e., it can only be transporting data from DRAM to SM, or SM to DRAM.\
+So, if you want to issue a store after reading, you'll have to wait for the read to finish using the bus before you can send your store on the bus.
+
+There are some more ways of limit-testing this that I hope to expand upon further in the future. For instance, to counter the load vs store of (1), you can have a *read-heavy* kernel rather than a memory-transfer kernel. E.g., summing a vector.
+
+Testing (2) would be possible via using half the registers and double the SMs, for instance.
+
+
+#### Result
+
+Alas, when we test, we observe that it takes **40 SMs** to reach HBM saturation on our A100 (btw, this is an A100 SXM4 with 1310 GB/s, and it has 108 SMs total).
+
+Now, of course there are those two limitations I stated above, and there is plenty of room for optimizations (skipping caching, `cp.async`, prefetching), but this is worse than I expected.
+
+#### Explanation {#k0_explanation}
+
+So, what do we hope that the generated SASS looks like?
+It would be something like the following:
+
+- The code utilizes ~248 registers, so 62 `float4` loads in-flight simultaneously
+- `ptxas` then beautifully interleaves loads/stores into an optimal arrangement so that we have many loads in-flight simultaneously (and give each load some time before we require its data), e.g.,
+
+```{#lst-sched lst-cap="Desired load/store schedule"}     
+load    A[0..61], 
+store   A[0..7], 
+load    (A+62)[0..7], 
+store   (A+8)[0..7], 
+...
+load    (A+n-1-8)[0..7]
+store   (A+n-1-62)[0..62]
+```
+
+
+But when we [look at the sass](https://github.com/ethansirois/hbmmax/blob/master/k0/k0.sass), it's unfortunately quite different:
+```nvsass
+// ...
+/*0070*/  LDG.E.128.CONSTANT R8, [R32.64] ;       
+/*0080*/  LDG.E.128.CONSTANT R20, [R32.64+0x4000] ;  
+/*0090*/  LDG.E.128.CONSTANT R4, [R32.64+0x8000] ;   
+/*00a0*/  LDG.E.128.CONSTANT R16, [R32.64+0xc000] ;  
+/*00b0*/  IMAD.WIDE R30, R30, R31, c[0x0][0x168] ;   
+/*00c0*/  LDG.E.128.CONSTANT R12, [R32.64+0x10000] ; 
+// store R8
+/*00d0*/  STG.E.128 [R30.64], R8 ;        
+// now we can start another load into R8           
+/*00e0*/  LDG.E.128.CONSTANT R8, [R32.64+0x14000] ;  
+// same with R20
+/*00f0*/  STG.E.128 [R30.64+0x4000], R20 ;           
+/*0100*/  LDG.E.128.CONSTANT R20, [R32.64+0x18000] ;
+// etc... 
+/*0110*/  STG.E.128 [R30.64+0x8000], R4 ;            
+/*0120*/  STG.E.128 [R30.64+0xc000], R16 ;           
+/*0130*/  LDG.E.128.CONSTANT R4, [R32.64+0x1c000] ;  
+/*0140*/  LDG.E.128.CONSTANT R16, [R32.64+0x20000] ; 
+/*0150*/  STG.E.128 [R30.64+0x10000], R12 ;          
+/*0160*/  LDG.E.128.CONSTANT R12, [R32.64+0x24000] ; 
+/*0170*/  STG.E.128 [R30.64+0x14000], R8 ;     
+// ...      
+```
+
+*Note:* \ This would be much worse, a serialized stream of `read 0, write 0, read 1, write 1`, if we don't have the `__restrict__` keyword. [See the SASS here](https://github.com/ethansirois/hbmmax/blob/master/k0/k0_t.sass).
+
+It has the essence of what we hoped for, just only using 40 registers *total*, and only 20 for loads (5 four-register groups).
+
+This was incredibly confusing to me at first. We launch the kernel with a block size of 256 threads, which is known at compile-time. The kernel's function name gets mangled[^3] (because it's not `extern`ed), so there's not even the chance that an outside function could invoke our kernel...\
+Regardless, after some head-scratching, it turns out that we need to set the `__launch_bounds__(256, 1)` to specify that this kernel will not be called with more than 256 threads per block (and 1 block per SM). (Thanks AI!)
+
+[^3]: This means that it becomes very difficult to invoke without very special compiler knowledge, because the the name of our `small_SMs` function becomes ` _Z9small_SMsPK6float4PS_` in the binary, for instance.
+
+
+### Kernel k0_bounds --- launch_bounds
+So we have the same kernel as above just with the compiler hint added:
+```C++
+__global__ void 
+__launch_bounds__(THREADS_PER_BLOCK, BLOCKS_PER_SM)
+small_SMs(const float4* __restrict__ dA, float4* __restrict__ dB) {
+    const int step = BLOCKS_PER_SM * SMALL_SMs_USED * THREADS_PER_BLOCK;
+    const int idx = blockIdx.x * THREADS_PER_BLOCK + threadIdx.x;
+
+    #pragma unroll
+    for (int i = 0; i < SMALL_NUM_STEPS; ++i) {
+        dB[i * step + idx] = dA[i * step + idx];
+    }
+}
+```
+
+#### Result
+The SASS is much better! It now uses nearly all registers (61 four-register groups):
+```nvsass
+/*0070*/   LDG.E.128.CONSTANT R20, [R2.64] ;         
+/*0080*/   LDG.E.128.CONSTANT R48, [R2.64+0x24000] ; 
+/*0090*/   LDG.E.128.CONSTANT R60, [R2.64+0x18000] ; 
+    // ... many loads
+/*0440*/   LDG.E.128.CONSTANT R244, [R2.64+0x3c000] ; 
+/*0450*/   STG.E.128 [R248.64], R20 ;                 
+/*0460*/   LDG.E.128.CONSTANT R20, [R2.64+0xe8000] ;  
+/*0470*/   STG.E.128 [R248.64+0x24000], R48 ;         
+/*0480*/   LDG.E.128.CONSTANT R48, [R2.64+0xf8000] ;  
+/*0490*/   STG.E.128 [R248.64+0x18000], R60 ;         
+/*04a0*/   STG.E.128 [R248.64+0x28000], R112 ;        
+/*04b0*/   LDG.E.128.CONSTANT R60, [R2.64+0x114000] ; 
+/*04c0*/   LDG.E.128.CONSTANT R112, [R2.64+0x104000] ;
+/*04d0*/   STG.E.128 [R248.64+0x8000], R120 ;         
+/*04e0*/   LDG.E.128.CONSTANT R120, [R2.64+0xfc000] ; 
+/*04f0*/   STG.E.128 [R248.64+0x6c000], R40 ;         
+/*0500*/   STG.E.128 [R248.64+0xc000], R172 ;         
+/*0510*/   STG.E.128 [R248.64+0x10000], R188 ;        
+/*0520*/   STG.E.128 [R248.64+0x14000], R204 ;        
+/*0530*/   LDG.E.128.CONSTANT R40, [R2.64+0x14c000] ; 
+/*0540*/   STG.E.128 [R248.64+0x1c000], R196 ;        
+/*0550*/   STG.E.128 [R248.64+0x20000], R200 ;        
+/*0560*/   STG.E.128 [R248.64+0x50000], R104 ;        
+/*0570*/   STG.E.128 [R248.64+0x54000], R168 ;        
+/*0580*/   STG.E.128 [R248.64+0x58000], R72 ;         
+/*0590*/   STG.E.128 [R248.64+0x5c000], R88 ;         
+/*05a0*/   STG.E.128 [R248.64+0x60000], R180 ;        
+/*05b0*/   STG.E.128 [R248.64+0x64000], R44 ;         
+/*05c0*/   STG.E.128 [R248.64+0x68000], R96 ;         
+/*05d0*/   STG.E.128 [R248.64+0x74000], R100 ;        
+/*05e0*/   LDG.E.128.CONSTANT R188, [R2.64+0x100000] ;
+/*05f0*/   LDG.E.128.CONSTANT R204, [R2.64+0x10c000] ;
+/*0600*/   LDG.E.128.CONSTANT R172, [R2.64+0x110000] ;
+/*0610*/   LDG.E.128.CONSTANT R200, [R2.64+0x118000] ;
+/*0620*/   LDG.E.128.CONSTANT R196, [R2.64+0x11c000] ;
+/*0630*/   LDG.E.128.CONSTANT R88, [R2.64+0x134000] ; 
+/*0640*/   LDG.E.128.CONSTANT R104, [R2.64+0x138000] ;
+/*0650*/   LDG.E.128.CONSTANT R72, [R2.64+0x13c000] ; 
+/*0660*/   LDG.E.128.CONSTANT R168, [R2.64+0x140000] ;
+/*0670*/   LDG.E.128.CONSTANT R96, [R2.64+0x144000] ; 
+/*0680*/   LDG.E.128.CONSTANT R180, [R2.64+0x148000] ;
+/*0690*/   LDG.E.128.CONSTANT R44, [R2.64+0x150000] ; 
+/*06a0*/   STG.E.128 [R248.64+0x78000], R36 ;         
+/*06b0*/   LDG.E.128.CONSTANT R100, [R2.64+0x15c000] ;
+/*06c0*/   STG.E.128 [R248.64+0x94000], R12 ;         
+/*06d0*/   LDG.E.128.CONSTANT R36, [R2.64+0x154000] ; 
+/*06e0*/   LDG.E.128.CONSTANT R12, [R2.64+0x174000] ; 
+/*06f0*/   STG.E.128 [R248.64+0x8c000], R16 ;         
+/*0700*/   LDG.E.128.CONSTANT R16, [R2.64+0x16c000] ; 
+/*0710*/   STG.E.128 [R248.64+0x7c000], R4 ;          
+/*0720*/   STG.E.128 [R248.64+0x9c000], R80 ;         
+/*0730*/   STG.E.128 [R248.64+0xa0000], R64 ;         
+/*0740*/   LDG.E.128.CONSTANT R4, [R2.64+0x158000] ;  
+/*0750*/   LDG.E.128.CONSTANT R80, [R2.64+0x180000] ; 
+/*0760*/   STG.E.128 [R248.64+0xa4000], R84 ;         
+/*0770*/   STG.E.128 [R248.64+0x30000], R232 ;        
+
+```
+
+Nice, but it still requires 32 SMs to saturate the HBM...
+
+#### Explanation
+There's two issues that we see in the SASS:\
+\(1) It is only storing a few elements at a time before issuing more loads. This yields poor performance because the memory buses can only transfer reads or writes, not both, as I briefly mentioned in the limitations at the bottom of the [Expectation](#k0_expectation) section\
+\(2) This issue isn't visible in the SASS snippets that I provided, but we are also running into an issue that our memory instructions can no longer fit the address offset into the instructions' immediate value.\
+You can see it for yourself [here](TODO: add the line number of where it starts). See how we go from loads and stores to these `IMAD` and `IADD` instructions.
+
+I'm going to ignore (1) for now because it is very painful to try and edit the SASS which is emitted, so let's continue and hope that it doesn't appear when we apply other optimizations.\
+When you do these kinds of optimizations one-by-one, it's a great way to learn the effectiveness of various optimizations, but some weird "issues" like this don't appear after applying other optimizations. Which is nice, of course, but really makes you kick yourself for all of that wasted investigating[^4]...
+
+[^4]: I mean it's still an issue that they appear at all, of course. But if they're irrelevant for the *most performant* cases, then they're not really big issues. I want to write a post about my experience of this happening with the Triton compiler sometime soon (and a Triton optimization guide, because I personally feel that the "[Tutorials](https://triton-lang.org/main/getting-started/tutorials/index.html)" are just advanced use-cases of Triton).
+
+We can address (2) in the next kernel.
+
+
+#### Quick failed optimization
+I was trying to think of ways to reduce register pressure on the PTX side-of-things, and I realized that we could allocate one large blob of global memory, and then assign `dA` to the first half, and `dB` to the second half.
+
+From the PTX perspective, this looks nice! We saved ourself two registers (since GMEM addresses are 64 bits)!
+
+However, this was before I had realized that issue (2) was happening.\
+With (2), it's immediately[^pun] clear why this failed: we still have to use a separate register for the address of `dB` since $dB > dA + \text{MAX\_IMMEDIATE\_VALUE}$.
+
+I want to also add that this failed extremely hard because there is *no possible method* that I was able to find of getting `ptxas` to accept that `&dB[0] >= &dA[NUMEL]`. Even with `__builtin_assume()` compiler hints. It deemed my creation of `dB` from `dA` as possibly overlapping, and thus, all of the reads and writes were serialized.
+
+This meant that it looked like 
+```
+load r0, a[0], 
+store b[0], r0 
+load r0, a[1], 
+store b[1], r0
+```
+
+Which is horrible!!
+
+But even with a perfect `ptxas`, as I mentioned above, this optimization achieves nothing[^well].
+
+[^pun]: pun *intended*
+
+[^well]: *Really though, nothing?*\
+Well, it would save the device from passing an extra argument. And I was going to try to argue that since the kernel arguments are stored in constant memory, which is broadcast, that we would save an extra read, but we can actually bundle them into one read because each is 64bits, and we can read up to 128B simultaneously (on GMEM, I'm not actually exactly sure about the internals of constant memory vs global memory). But even then, we have to do another addition instruction (assuming the gap fits into an immediate). And alas, this requires compile-time length of `dA`...\
+So, from my (fallible) understanding of GPU architecture, I think that even in the idealized case, it achieves nothing.
+
+
+### Kernel k1_0 --- ptr increment
+So, to counteract the fact that our pointer-offsets are becoming extremely large, we can implement an age-old compiler trick: we just increment the pointer rather than having a loop variable which determines the offset.\
+This is historically useful for saving a register (and instruction), but it is quite nice here to avoid the mess of address calculation.
+
+And why can't `nvcc` just handle this itself? Well, I think that a large part is due to the fact that we're just fully unrolling the loop before we perform optimization passes, so it's probably harder for `nvcc` to spot this? Ultimately, we don't know.\
+(NVIDIA plz open source ,--__--)
+
+So our kernel looks like:
+```C++
+__global__ void 
+__launch_bounds__(THREADS_PER_BLOCK, BLOCKS_PER_SM)
+small_SMs(const float4* __restrict__ dA, float4* __restrict__ dB) {
+    const int step = BLOCKS_PER_SM * SMALL_SMs_USED * THREADS_PER_BLOCK;
+    const int idx = blockIdx.x * THREADS_PER_BLOCK + threadIdx.x;
+
+    #pragma unroll
+    for (int i = 0; i < SMALL_NUM_STEPS; ++i) {
+        dB[idx] = dA[idx];
+        dA += step;
+        dB += step;
+    }
+}
+```
+#### Result
+Anddddd this generates the same result, namely, requiring 32 SMs to saturate...
+
+#### Explanation
+It makes a lot of sense why this didn't improve performance when we [look at the SASS](https://github.com/ethansirois/hbmmax/blob/master/k1/k1.gist.sass).\
+But why is the SASS the same? Why does this happen?\
+Well, it helps if we remember an age-old, cursed behavior of C array syntax.
+
+```C
+int* a = malloc(4 * sizeof(int));
+for (int i = 0; i < 4; ++i) {
+    a[i] = 3 * i;
+}
+printf("a[2]: %i,\n2[a]: %i", a[2], 2[a]);
+```
+Running this prints: `a[2]: 6, 2[a]: 6`.
+
+And we can see that using an increasing constant for the base is really just the same as using an increasing constant for the offset.
+
+*Note:* \ Since this is part of my learning, when I get quite stumped on bugs that I find likely not fruitful/novel, I consult LLMs.\
+However, I was quite proud to remember this behavior and spot that this was happening. It's just a really random but neat observation.
+
+### Kernel k1_1 --- grouped_inner_loop
+So what we want is for the pointers to be incremented right before the offset becomes larger than the largest possible immediate operand.
+
+We can achieve this with the following kernel:
+```C++
+constexpr int GROUP_SIZE = 512;
+
+__global__ void 
+__launch_bounds__(THREADS_PER_BLOCK, BLOCKS_PER_SM)
+small_SMs(const float4* __restrict__ dA, float4* __restrict__ dB) {
+    const int step = BLOCKS_PER_SM * SMALL_SMs_USED * THREADS_PER_BLOCK;
+    const int idx = blockIdx.x * THREADS_PER_BLOCK + threadIdx.x;
+
+    for (int i = 0; i < SMALL_NUM_STEPS; i += GROUP_SIZE) {
+        #pragma unroll
+        for (int j = 0; j < GROUP_SIZE; ++j) {
+            dB[j * step + idx] = dA[j * step + idx];
+        }
+        dA += step * GROUP_SIZE;
+        dB += step * GROUP_SIZE;
+    }
+}
+```
+
+I picked `GROUP_SIZE` based on the fact that: by observation, SASS memory operations can support immediates of `-0x800000` to `0x7fc000`,\
+so then we want to increment our pointer address by `0x1000000` = $2^{23}$, so then group size should be:\
+$\frac{2^{23}}{\texttt{step} \cdot 16} = \frac{2^{23}}{4 \cdot 256 \cdot 16} = 2^{23 - (2+8+4)} = 2^{23 - 14} = 2^9 = 512$
+
+*Note:* \ Even if we didn't increment the pointers, and instead used the offset `(i + j) * step + idx`, the compiler will still increment the pointers for us so that we don't have to use a constant. It generates slightly different code, you can [see here](https://github.com/ethansirois/hbmmax/blob/master/k1/k1_1_t.gist.sass).
+
+#### Results
+It is barely faster, not really to a point that's noticeable. We are heavily memory-bound, and I think that these few instructions don't change too much, unfortunately.
+I thought that it would since I figured that we want to keep our LSU pipeline entirely full, but perhaps it can't accept one instr/cycle, or perhaps because of how they get jammed when fetching from DRAM, it doesn't matter...
+
+This kernel also has the following problem:\
+[The SASS](https://github.com/ethansirois/hbmmax/blob/master/k1/k1_1.gist.sass) now looks like 32 loads, then 32 stores, and then it loops back. But as I mentioned above, while it's nice to burst our loads/stores because of the data bus, we would ideally like to always have outstanding loads.\
+The reason is that stores are "instant" in terms of they instantly create an available register[^5].
+
+[^5]: I do have to learn more of the hardware internals though about what happens when store queues become backed-up and be able to reason about what's going on in the hardware.
+
+#### Limitations
+We would like loads/stores that looks like our @lst-sched.\
+We should just have a prologue that loads everything, a main loop that issues a burst of stores followed by a burst of loads, and then an epilogue of stores.
+
+But you can't really control how `ptxas` does everything. And while it'd be nice to fully trust `ptxas`'s decisions, [they're not always optimal](https://dl.acm.org/doi/10.1145/3332466.3374520).
+
+
+### A pitstop
+Well, let's carry-on then, ignoring (1) still.\
+There are two straightforward optimizations that we can apply from here:
+
+1. Ensuring that we're not caching our loads/stores (since we won't reuse them)
+2. Using shared memory or prefetching to decrease the latency of other data (since they don't occupy instructions)
+
+Let's go!
+
+### Kernel k2 --- cache_policy
+This is the beginning of our inline-assembly journey for these kernels! But that means that the kernel will become less readable...
+
+We need to first see what cache-behavior specifications load and store instructions support. See [here](https://docs.nvidia.com/cuda/archive/11.0_GA/parallel-thread-execution/index.html#cache-operators), but the T;LDR is that we want to pick `cg` because this means that it skips the L1, and only goes to L2 (passing through L2 is required).
+
+We define the following two inline functions:
+```C++
+__device__ __forceinline__
+float4 load(const float4* p) {
+    float4 v;
+    asm volatile("ld.global.cg.nc.v4.f32 {%0, %1, %2, %3}, [%4];"
+        : "=f"(v.x), "=f"(v.y), "=f"(v.z), "=f"(v.w)
+        : "l"(p));
+    return v;
+}
+
+__device__ __forceinline__
+void store(float4* p, float4 v) {
+    asm volatile("st.global.cg.v4.f32 [%0], {%1, %2, %3, %4};"
+        :: "l"(p), "f"(v.x), "f"(v.y), "f"(v.z), "f"(v.w)
+        : "memory");
+}
+```
+
+And then change our kernel to look like:
+```C++
+__global__ void 
+__launch_bounds__(THREADS_PER_BLOCK, BLOCKS_PER_SM)
+small_SMs(const float4* __restrict__ dA, float4* __restrict__ dB) {
+    const int step = BLOCKS_PER_SM * SMALL_SMs_USED * THREADS_PER_BLOCK;
+    const int idx = blockIdx.x * THREADS_PER_BLOCK + threadIdx.x;
+
+    for (int i = 0; i < SMALL_NUM_STEPS; i += GROUP_SIZE) {
+        #pragma unroll
+        for (int j = 0; j < GROUP_SIZE; ++j) {
+            store(&dB[(i + j) * step + idx], load(&dA[(i + j) * step + idx]));
+        }
+        dA += GROUP_SIZE * step;
+        dB += GROUP_SIZE * step;
+    }
+
+}
+```
+
+If you inspected the code, you may notice the `.nc` in our `ld.global` instruction.\
+The `ld.global.nc` instructions utilize the non-coherent cache. It's [not the most well-documented thing](https://docs.nvidia.com/cuda/archive/11.0_GA/parallel-thread-execution/index.html#data-movement-and-conversion-instructions-ld-global-nc), but `ptxas` emits it on our loads because we specified `const __restrict__`, so we'll follow suit.\
+(And testing reveals that it is more performant.)
+
+#### Results
+This gave us a ~5% boost, which is quite nice! 
+
+But [looking at the SASS](https://github.com/ethansirois/hbmmax/blob/master/k2/k2_1.sass), we see that we're missing our offsets for our base address. It's still correct, because the base has the offset baked into it, but we would like to use our immediate offsets to save ourselves instructions (just in case).
+
+### Kernel k2_1 --- immediate_offsets
+So we can bake our immedates into the PTX, but it requires it to be a compile-time constant.
+
+*Quiz question:* \ Are loop variables of a fully-unrolled loop a compile-time constant? 
+
+*Answer:* \ No `:"(`
+
+So it unfortunately gets very messy, and we have to [write some hacky templated functions](https://github.com/ethansirois/hbmmax/blob/master/mem_ops.cuh) to overcome this.\
+But it's really the same idea as above, with some extra effort for it to actually compile nicely.
+
+#### Results
+We can [see in the SASS](https://github.com/ethansirois/hbmmax/blob/master/k2/k2_1.sass) that we are now properly emitting instructions with the base offsets included!
+
+Like we previously found, it doesn't do too much for us, unfortunately...
+
+
+Onwards!
+
+### Kernel k3 --- shared_memory
+We're now ready to get to the *hopefully* most obvious optimization that awaits us on Ampere, utilizing shared memory via `cp.async` instructions! They're outlined [here](https://docs.nvidia.com/cuda/archive/11.0_GA/parallel-thread-execution/index.html#data-movement-and-conversion-instructions-asynchronous-copy), but the TL;DR is that the instruction can directly tranport data from global memory to shared memory without intermediately using a register!
+
+This means that we can issue as many loads from global memory to shared memory, with the amount of available shared memory being the only limiting factor. 
+
+We just have to synchronize before reading to ensure that it finished transporting the data.
+
+(We're going to avoid using cache policies for simplicity until the end, so this is building off of `k1_1.cu`.)
+
+#### Optimizing in-flight requests
+Let's first see how much shared memory each thread can have.\
+So the max per-block shared memory that we can allocate is 163KB on an A100.\
+Splitting this up amongst 256 threads, we get $163 \cdot 4$ bytes per thread. Then, a single `float4` occupies 16B, so each thread can load $\frac{163 \cdot 4}{16} > 40$ elements (unfortunately, 3KB will just sit unutilized, but it would get messy to use it).
+
+These `cp.async` don't occupy/hold any of our registers, so this means that we still have all of our registers for loading/storing! It literally only costs us one register, the shared memory pointer.\
+So we literally get 60% more data for free (we hope)!
+
+Coming up with the best strategy of how we can interleave `cp.async` with global loads, shared loads, and global stores is actaully quite tricky (to me). There's a lot to consider. So let's lay out some ideas:
+
+- We want to maximize the number of loads that are in-flight simultaneously.
+    - With 61 four-register groups and 40 shared memory slots for these, this means that we *ideally* have 101 loads in-flight from global $\to$ shared/local.
+- We don't need any registers reserved to start `cp.async`.
+    - The global and shared memory pointers already live in registers throughout the program execution, and the offsets can fit into the immediate operands.
+- We want to do as much work as possible before issuing stores.
+    - This gives maximal time for our loads.
+- We ideally want to burst our loads, `cp.async`, and stores.
+    - I suspect that this is better for our hardware, even though I imagine that these all go to the same pipeline unit, because we also want our buses to be pipelined?
+
+
+Well, considering all of that, I tried to devise this complex scheme to maximally overlap things (don't worry about understanding it too much, we won't use it).
+```
+                            // 60 regs avail, 40 shared avail   // 0 I-F
+load 60 g -> r0             // 0 regs avail, 40 shared avail    // 60 I-F
+copy 40 g -> s0             // 0 regs avail, 0 shared avail     // 100 I-F
+/* 60 regs < 40 smem */ // perhaps this is like 20r < 40r < 4sm??
+store 60 r0 -> g            // 60 regs avail,   0 shared avail  // 40 I-F       // "delayed" --- nothing ready, but nothing else to do this first time...
+load 20 g -> r1             // 40 regs avail,   0 shared avail  // 60 I-F
+s_load 40 s0 -> r2          // 0 regs avail,    40 shared avail // 20 I-F       // r2 immediately ready!
+copy 40 g -> s1             // 0 regs avail,    0 shared avail  // 60 I-F
+store 40 r2 -> g            // 40 regs avail,   0 shared avail  // 60 I-F       // should be ready
+load 40 g -> r3             // 0 regs avail,    0 shared avail  // 100 I-F
+/* 20 regs < 40 smem < 40 regs */
+store 20 r1 -> g            // 20 regs avail,   0 shared avail  // 80 I-F       // prob delayed
+/* 40 smem < 40 regs */ // the reason i like to keep this is that it buys time for r3?? (only by like 40 instrs tho...)
+s_load 20 s1_20_20 -> r4    // 0 regs avail,    20 shared avail // 60 I-F       // also prob delayed --- but s1 load done before r3 load
+copy 20 g -> s2_20_20       // 0 regs avail,    0 shared avail  // 80 I-F
+store 20 r4 -> g            // 20 regs avail,   0 shared avail  // 80 I-F       // no delay
+s_load 20 s1_20_0 -> r5     // 0 regs avail,    20 shared avail // 60 I-F       // no delay bc alr awaited s1
+copy 20 g -> s2_20_40       // 0 regs avail,    0 shared avail  // 80 I-F
+store 20 r5 -> g            // 20 regs avail,   0 shared avail  // 80 I-F       // no delay
+load 20 g -> r6             // 0 regs avail,    0 shared avail  // 100 I-F
+store 40 r3 -> g            // 40 regs avail,   0 shared avail  // 60 I-F       // hopefully no delay atp
+load 40 g -> r7             // 0 regs avail,    0 shared avail  // 100 I-F
+/* 40 smem < 20 regs < 40 regs */   // but our regs are all tied-up, so nothing to do with the smem...
+                                    // so now we should just cycle through what we did after our initial load+copy...
+// so we just repeat what we did above
+given that, let's swap the bottom part
+
+```
+So we can have that more complex structure, or we could go with the simple thing of just keeping that top part *only*
+```
+/* prologue */
+/* these first two instrs are basically "store 40" of main loop */
+                            // 60 regs avail, 40 shared avail   // 0 I-F
+load 60 g -> r0             // 0 regs avail, 40 shared avail    // 60 I-F
+copy 40 g -> s0             // 0 regs avail, 0 shared avail     // 100 I-F
+/* 60 regs < 40 smem */ // perhaps this is like 20r < 40r < 4sm??
+store 60 r0 -> g            // 60 regs avail,   0 shared avail  // 40 I-F       // "delayed" --- nothing ready, but nothing else to do this first time...
+load 20 g -> r1             // 40 regs avail,   0 shared avail  // 60 I-F
+
+/* main loop! */
+s_load 40 s0 -> r2          // 0 regs avail,    40 shared avail // 20 I-F       // r2 immediately ready!
+copy 40 g -> s1             // 0 regs avail,    0 shared avail  // 60 I-F
+store 40 r2 -> g            // 40 regs avail,   0 shared avail  // 60 I-F       // should be ready
+load 40 g -> r3             // 0 regs avail,    0 shared avail  // 100 I-F
+/* 20 regs < 40 smem < 40 regs */
+store 20 r1 -> g            // 20 regs avail,   0 shared avail  // 80 I-F       // prob delayed
+load 20 g -> r4             // 0 regs avail,   0 shared avail  // 100 I-F
+store 40 r3 -> g            // 40 regs avail,   0 shared avail  // 60 I-F
+
+s_load 40 s0 -> r5          // 0 regs avail,    40 shared avail // 60 I-F       // r2 immediately ready!
+copy 40 g -> s2             // 0 regs avail,   0 shared avail  // 100 I-F         
+store 40 r5 -> g            // 40 regs avail,   0 shared avail  // 60 I-F
+load 40 g -> r6             // 0 regs avail,   0 shared avail  // 100 I-F
+store 20 r4 -> g            // 20 regs avail,   0 shared avail  // 80 I-F       // should be ready
+load 20 g -> r7             // 0 regs avail,   0 shared avail  // 100 I-F
+store 40 r6 -> g            // 40 regs avail,   0 shared avail  // 60 I-F
+
+// ... repeat block above ...
+
+/* epilogue */
+s_load 40 sx0 -> rx1          // 0 regs avail,   40 shared avail  // 20 I-F
+store 40 rx1 -> g            // 40 regs avail,   0 shared avail  // 60 I-F
+store 20 rx0 -> g            // 20 regs avail,   0 shared avail  // 80 I-F
+
+```
+
+And we could go even simpler I believe with more bursting, or we could get more complex than the first version by having a group of 20 manage shared + 20 regs, and 40 just always loading? I would have to explore it more
+
+So, let's get to the kernel. 
+It basically looks like the above pseudo-code in CUDA C++ and gets a little ugly to try and control scheduling. 
+
+See [here](https://github.com/ethansirois/hbmmax/blob/master/k3/k3.cu).
+
+#### Results
+Voila! We now only need **26 SMs** to saturate the HBM! This is less than one fourth of the SMs, which is cool!
+
+
+#### Failed simplification
+While it was really annoying to write the kernel this way (in terms of figuring out all of the best "instruction scheduling" manually) rather than letting `ptxas` freely rearrange things, I was forced to.\
+Writing simper code [like this](TODO https://github.com/ethansirois/hbmmax/blob/master/k3/k3_t.cu) didn't have any effect, because this is pretty similar to how `ptxas` [already rearranged instructions](https://github.com/ethansirois/hbmmax/blob/master/k3-smem/k3_t.sass#L):
+
+However, taking this a little further to something [like this](https://github.com/ethansirois/hbmmax/blob/master/k3/k3_tt.cu) dramatically hurts our performance.
+
+Even though all of the instructions in the loop are unrolled and all three forms are logically equivalent, so we should expect `ptxas` to clearly see that there are no dependencies that force us to issue the writes to `dB` immediately, and to thus optimally arrange the instructions.
+
+This issue with compilers is interesting to me.\
+Sometimes, rearranging things has no effect. Other times, it dramatically hurts performance.\
+Either way, you can't expect `ptxas` to respect your wishes...
+
+### Kernel k3_1 --- cache_policies
+So I was ommitting the cache policies until the very end because it [alters our code](https://github.com/ethansirois/hbmmax/blob/master/k3/k3_1.cu) and [gets messy](https://github.com/ethansirois/hbmmax/blob/master/mem_ops.cuh).
+
+It turns out, though, that using `asm volatile` really hurts `ptxas`'s ability to interleave things, and because inline assembly requires compile-time constants, it gets very messy.\
+The SASS just ends up getting laid-out in unoptimal ways, even though these instructions should give us a 5%-ish boost, they end up tanking our performance by ~30%, around `k0`'s performance.
+
+I am currently working on laying these out somehow, though...
+
+
+<!-- ### Kernel kx --- prefetch
+Upon reading the [PTX 11.0 documentation](https://docs.nvidia.com/cuda/archive/11.0_GA/parallel-thread-execution/index.html#data-movement-and-conversion-instructions) (main CUDA Toolkit release for `sm_80`, which is what we need for A100), I discovered that the GPU supports prefetching (I wasn't aware of this before). -->
+
+### What about prefetching?
+Prefetching actually performs quite poorly, so let's discuss why.
+
+I originally thought that prefetching would be the most performant, because it happens in the background and we can run ahead. But there are several things that I have realized:
+
+1. We can't necessarily synchronize to ensure that the prefetch finished how we can with `cp.async`.
+    - Originally, I thought that this was good, because it meant that we wouldn't have to wait and the hardware would mark when we were able to execute. But then I realized that this is just the same thing as `cp.async` with less hardware management. `cp.async` handles the synchronization into the hardware, so our warp won't get selected until it's ready. Quite powerful!
+2. It has less control than shared memory.
+    - The hardware manages the cache for us, so if something arrives late and we use it shortly after, it's more difficult to use explicit cache management (I believe).
+3. Because the hardware is keeping track of which things to evict, and if something is in its cache, this is more delayed than using direct access as we can into shared memory. 
+    - We know exactly where it resides, and there's no overhead for tracking how to manage it.
+
+
+I need to explore more prefetch cache management behaviors to explore this more.
+
+## Lessons
+
+### Look at the SASS!!!
+This is probably the biggest lesson. Even just taking our first kernel, [looking at its PTX](TODO), we may really doubt its performance. All of the loads and stores are streamlined. This may lead us on an adventure where we have a prologue, main loop, and then epilogue, and ensure that we access a constant-sized array with constand indices to ensure that it stays as registers...
+
+But we don't need to do this upon inspecting the SASS. We see that `ptxas` handles instruction scheduling (sometimes against our wishes, as we saw in [Explanation for k0]((#k0_explanation))).
+
+
+On the other hand, we won't be able to detect that the constant doesn't fit into the immediate operand for memory instructions by looking at the PTX either. This is the kind of subtle thing that is very easy to miss when working at the PTX-level only. (This is generally not very relevant because it's quite rare to have huge constant offsets, but the point stands.)
+
+
+## Methodology
+
+As you can see [here](https://github.com/ethansirois/hbmmax/blob/master/k0/k0.cu#L52) we can run a "peak" version of the kernel with many SMs, and use that to compare our kernels to.\
+This then allows us to see how close our kernel is to the peak.

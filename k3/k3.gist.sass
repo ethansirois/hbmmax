@@ -1,0 +1,477 @@
+
+Fatbin elf code:
+================
+arch = sm_86
+code version = [1,8]
+host = linux
+compile_size = 64bit
+
+	code for sm_86
+
+Fatbin elf code:
+================
+arch = sm_86
+code version = [1,8]
+host = linux
+compile_size = 64bit
+
+	code for sm_86
+		Function : small_SMs
+	.headerflags	@"EF_CUDA_64BIT_ADDRESS EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)"
+	.headerflags	@"EF_CUDA_64BIT_ADDRESS EF_CUDA_SM86 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM86)"
+        /*0000*/                   IMAD.MOV.U32 R1, RZ, RZ, c[0x0][0x28] ;
+        /*0010*/                   S2R R0, SR_CTAID.X ;
+        /*0020*/                   ULDC.64 UR4, c[0x0][0x118] ;
+        /*0030*/                   IADD3 R1, R1, -0x8, RZ ;
+        /*0040*/                   S2R R8, SR_TID.X ;
+        /*0050*/                   IMAD R2, R0, 0x100, R8 ;
+        /*0060*/                   IMAD.SHL.U32 R3, R8, 0x10, RZ ;
+        /*0070*/                   IMAD.WIDE R248, R2, 0x10, RZ ;
+        /*0080*/                   IADD3 R250, P1, R248.reuse, c[0x0][0x160], RZ ;
+        /*0090*/                   IADD3 R2, P0, R248, c[0x0][0x160], RZ ;
+        /*00a0*/                   IADD3.X R251, R249, c[0x0][0x164], RZ, P1, !PT ;
+        /*00b0*/                   IADD3 R4, P1, R2.reuse, 0xf4000, RZ ;
+        /*00c0*/                   IADD3 R6, P2, R2.reuse, 0xf8000, RZ ;
+        /*00d0*/                   LDG.E.128 R20, [R250.64+0x10000] ;
+        /*00e0*/                   IADD3 R24, P3, R2.reuse, 0x134000, RZ ;
+        /*00f0*/                   IMAD.X R5, RZ, RZ, R251.reuse, P1 ;
+        /*0100*/                   IADD3 R8, P1, R2.reuse, 0xfc000, RZ ;
+        /*0110*/                   IMAD.X R7, RZ, RZ, R251.reuse, P2 ;
+        /*0120*/                   IADD3 R10, P2, R2.reuse, 0x100000, RZ ;
+        /*0130*/                   IMAD.X R25, RZ, RZ, R251.reuse, P3 ;
+        /*0140*/                   LDGSTS.E.BYPASS.128 [R3], [R4.64] ;
+        /*0150*/                   IMAD.X R9, RZ, RZ, R251.reuse, P1 ;
+        /*0160*/                   IADD3 R12, P1, R2.reuse, 0x104000, RZ ;
+        /*0170*/                   IMAD.X R11, RZ, RZ, R251.reuse, P2 ;
+        /*0180*/                   IADD3 R14, P2, R2.reuse, 0x108000, RZ ;
+        /*0190*/                   LDGSTS.E.BYPASS.128 [R3+0x1000], [R6.64] ;
+        /*01a0*/                   IADD3 R52, P3, R2.reuse, 0x140000, RZ ;
+        /*01b0*/                   IMAD.X R13, RZ, RZ, R251.reuse, P1 ;
+        /*01c0*/                   IADD3 R16, P1, R2.reuse, 0x10c000, RZ ;
+        /*01d0*/                   IMAD.X R15, RZ, RZ, R251.reuse, P2 ;
+        /*01e0*/                   LDGSTS.E.BYPASS.128 [R3+0x2000], [R8.64] ;
+        /*01f0*/                   IMAD.X R53, RZ, RZ, R251.reuse, P3 ;
+        /*0200*/                   IADD3 R4, P2, R2.reuse, 0x110000, RZ ;
+        /*0210*/                   IMAD.X R17, RZ, RZ, R251, P1 ;
+        /*0220*/                   LDGSTS.E.BYPASS.128 [R3+0x3000], [R10.64] ;
+        /*0230*/                   IADD3 R6, P1, R2, 0x114000, RZ ;
+        /*0240*/                   IMAD.X R5, RZ, RZ, R251.reuse, P2 ;
+        /*0250*/                   LDGSTS.E.BYPASS.128 [R3+0x4000], [R12.64] ;
+        /*0260*/                   IADD3 R8, P2, R2.reuse, 0x118000, RZ ;
+        /*0270*/                   IMAD.X R7, RZ, RZ, R251.reuse, P1 ;
+        /*0280*/                   LDGSTS.E.BYPASS.128 [R3+0x5000], [R14.64] ;
+        /*0290*/                   IADD3 R10, P1, R2.reuse, 0x11c000, RZ ;
+        /*02a0*/                   IMAD.X R9, RZ, RZ, R251.reuse, P2 ;
+        /*02b0*/                   LDGSTS.E.BYPASS.128 [R3+0x6000], [R16.64] ;
+        /*02c0*/                   IADD3 R12, P2, R2, 0x120000, RZ ;
+        /*02d0*/                   IMAD.X R11, RZ, RZ, R251, P1 ;
+        /*02e0*/                   LDGSTS.E.BYPASS.128 [R3+0x7000], [R4.64] ;
+        /*02f0*/                   IADD3 R14, P1, R2.reuse, 0x124000, RZ ;
+        /*0300*/                   IMAD.X R13, RZ, RZ, R251.reuse, P2 ;
+        /*0310*/                   LDGSTS.E.BYPASS.128 [R3+0x8000], [R6.64] ;
+        /*0320*/                   IADD3 R16, P2, R2.reuse, 0x128000, RZ ;
+        /*0330*/                   IMAD.X R15, RZ, RZ, R251.reuse, P1 ;
+        /*0340*/                   LDGSTS.E.BYPASS.128 [R3+0x9000], [R8.64] ;
+        /*0350*/                   IADD3 R4, P1, R2.reuse, 0x12c000, RZ ;
+        /*0360*/                   IMAD.X R17, RZ, RZ, R251.reuse, P2 ;
+        /*0370*/                   IADD3 R18, P2, R2.reuse, 0x130000, RZ ;
+        /*0380*/                   LDGSTS.E.BYPASS.128 [R3+0xa000], [R10.64] ;
+        /*0390*/                   IMAD.X R5, RZ, RZ, R251.reuse, P1 ;
+        /*03a0*/                   IADD3 R36, P1, R2.reuse, 0x138000, RZ ;
+        /*03b0*/                   LDGSTS.E.BYPASS.128 [R3+0xb000], [R12.64] ;
+        /*03c0*/                   IMAD.X R19, RZ, RZ, R251, P2 ;
+        /*03d0*/                   IADD3 R44, P2, R2, 0x13c000, RZ ;
+        /*03e0*/                   LDGSTS.E.BYPASS.128 [R3+0xc000], [R14.64] ;
+        /*03f0*/                   IMAD.X R37, RZ, RZ, R251.reuse, P1 ;
+        /*0400*/                   IMAD.X R45, RZ, RZ, R251, P2 ;
+        /*0410*/                   LDGSTS.E.BYPASS.128 [R3+0xd000], [R16.64] ;
+                                   ... another 5 LDGSTS.E.BYPASS.128 ...
+        /*0470*/                   LDGSTS.E.BYPASS.128 [R3+0x13000], [R52.64] ;
+        /*0480*/                   LDGDEPBAR ;
+        /*0490*/                   LDG.E.128 R4, [R250.64] ;
+                                   ... another 58 LDG.E.128 ...
+        /*0840*/                   LDG.E.128 R244, [R250.64+0xf0000] ;
+        /*0850*/                   IADD3.X R3, R249, c[0x0][0x164], RZ, P0, !PT ;
+        /*0860*/                   IADD3 R250, P1, R248, c[0x0][0x168], RZ ;
+        /*0870*/                   IADD3.X R251, R249, c[0x0][0x16c], RZ, P1, !PT ;
+        /*0880*/                   STG.E.128 [R250.64+0x10000], R20 ;
+                                   ... another 59 STG.E.128 ...
+        /*0c40*/                   STG.E.128 [R250.64+0xf0000], R244 ;
+        /*0c50*/                   LDG.E.128 R168, [R2.64+0x144000] ;
+                                   ... another 39 LDG.E.128 ...
+        /*0ed0*/                   LDG.E.128 R8, [R2.64+0x1e4000] ;
+        /*0ee0*/                   STL [R1], RZ ;
+        /*0ef0*/                   IMAD.MOV.U32 R0, RZ, RZ, R248 ;
+        /*0f00*/                   IMAD.MOV.U32 R252, RZ, RZ, R249 ;
+        /*0f10*/                   S2R R246, SR_TID.X ;
+        /*0f20*/                   DEPBAR.LE SB0, 0x0 ;
+        /*0f30*/                   IADD3 R176, P0, R0, c[0x0][0x160], RZ ;
+        /*0f40*/                   ULDC.64 UR4, c[0x0][0x118] ;
+        /*0f50*/                   IADD3.X R177, R252, c[0x0][0x164], RZ, P0, !PT ;
+        /*0f60*/                   IADD3 R4, P0, R176.reuse, 0x238000, RZ ;
+        /*0f70*/                   IADD3 R6, P1, R176, 0x23c000, RZ ;
+        /*0f80*/                   IMAD.X R5, RZ, RZ, R177.reuse, P0 ;
+        /*0f90*/                   IADD3 R2, P0, R0, c[0x0][0x168], RZ ;
+        /*0fa0*/                   IMAD.X R7, RZ, RZ, R177, P1 ;
+        /*0fb0*/                   IADD3.X R3, R252, c[0x0][0x16c], RZ, P0, !PT ;
+        /*0fc0*/                   IADD3 R174, P0, R176, 0x240000, RZ ;
+        /*0fd0*/                   LDS.128 R180, [R246.X16] ;
+        /*0fe0*/                   IMAD.SHL.U32 R244, R246, 0x10, RZ ;
+        /*0ff0*/                   IMAD.X R175, RZ, RZ, R177, P0 ;
+        /*1000*/              @!PT LDS RZ, [RZ] ;
+                              ... another 1 LDS ...
+        /*1020*/              @!PT LDS RZ, [RZ] ;
+        /*1030*/                   LDGSTS.E.BYPASS.128 [R244], [R4.64] ;
+        /*1040*/                   LDS.128 R184, [R246.X16+0x1000] ;
+        /*1050*/                   IMAD.MOV.U32 R173, RZ, RZ, 0x244000 ;
+        /*1060*/                   STG.E.128 [R2.64+0xf4000], R180 ;
+        /*1070*/              @!PT LDS RZ, [RZ] ;
+                              ... another 1 LDS ...
+        /*1090*/              @!PT LDS RZ, [RZ] ;
+        /*10a0*/                   LDGSTS.E.BYPASS.128 [R244+0x1000], [R6.64] ;
+        /*10b0*/                   LDS.128 R188, [R246.X16+0x2000] ;
+        /*10c0*/                   LDG.E.128 R248, [R176.64+0x1e8000] ;
+        /*10d0*/                   IADD3 R172, P0, P1, R0, c[0x0][0x160], R173 ;
+        /*10e0*/                   STG.E.128 [R2.64+0xf8000], R184 ;
+        /*10f0*/                   IADD3.X R173, R252, c[0x0][0x164], RZ, P0, P1 ;
+        /*1100*/              @!PT LDS RZ, [RZ] ;
+                              ... another 1 LDS ...
+        /*1120*/              @!PT LDS RZ, [RZ] ;
+        /*1130*/                   LDGSTS.E.BYPASS.128 [R244+0x2000], [R174.64] ;
+        /*1140*/                   LDS.128 R192, [R246.X16+0x3000] ;
+        /*1150*/                   IADD3 R4, P0, R172, 0x4000, RZ ;
+        /*1160*/                   LDG.E.128 R240, [R176.64+0x1ec000] ;
+        /*1170*/                   IMAD.X R5, RZ, RZ, R173, P0 ;
+        /*1180*/                   STG.E.128 [R2.64+0xfc000], R188 ;
+        /*1190*/              @!PT LDS RZ, [RZ] ;
+                              ... another 1 LDS ...
+        /*11b0*/              @!PT LDS RZ, [RZ] ;
+        /*11c0*/                   LDGSTS.E.BYPASS.128 [R244+0x3000], [R172.64] ;
+        /*11d0*/                   LDS.128 R180, [R246.X16+0x4000] ;
+        /*11e0*/                   IADD3 R6, P0, R172, 0x8000, RZ ;
+        /*11f0*/                   LDG.E.128 R236, [R176.64+0x1f0000] ;
+        /*1200*/                   IMAD.X R7, RZ, RZ, R173, P0 ;
+        /*1210*/                   STG.E.128 [R2.64+0x100000], R192 ;
+        /*1220*/              @!PT LDS RZ, [RZ] ;
+                              ... another 1 LDS ...
+        /*1240*/              @!PT LDS RZ, [RZ] ;
+        /*1250*/                   LDGSTS.E.BYPASS.128 [R244+0x4000], [R4.64] ;
+        /*1260*/                   LDS.128 R184, [R246.X16+0x5000] ;
+        /*1270*/                   LDG.E.128 R232, [R176.64+0x1f4000] ;
+        /*1280*/                   IADD3 R174, P0, R172, 0xc000, RZ ;
+        /*1290*/                   IMAD.X R175, RZ, RZ, R173, P0 ;
+        /*12a0*/                   STG.E.128 [R2.64+0x104000], R180 ;
+        /*12b0*/              @!PT LDS RZ, [RZ] ;
+                              ... another 1 LDS ...
+        /*12d0*/              @!PT LDS RZ, [RZ] ;
+        /*12e0*/                   LDGSTS.E.BYPASS.128 [R244+0x5000], [R6.64] ;
+        /*12f0*/                   LDS.128 R196, [R246.X16+0x6000] ;
+        /*1300*/                   IADD3 R4, P0, R172, 0x10000, RZ ;
+        /*1310*/                   LDG.E.128 R228, [R176.64+0x1f8000] ;
+        /*1320*/                   IMAD.X R5, RZ, RZ, R173, P0 ;
+        /*1330*/                   STG.E.128 [R2.64+0x108000], R184 ;
+        /*1340*/              @!PT LDS RZ, [RZ] ;
+                              ... another 1 LDS ...
+        /*1360*/              @!PT LDS RZ, [RZ] ;
+        /*1370*/                   LDGSTS.E.BYPASS.128 [R244+0x6000], [R174.64] ;
+        /*1380*/                   LDS.128 R192, [R246.X16+0x7000] ;
+        /*1390*/                   LDG.E.128 R224, [R176.64+0x1fc000] ;
+        /*13a0*/                   IADD3 R6, P0, R172, 0x14000, RZ ;
+        /*13b0*/                   IMAD.X R7, RZ, RZ, R173, P0 ;
+        /*13c0*/                   STG.E.128 [R2.64+0x10c000], R196 ;
+        /*13d0*/              @!PT LDS RZ, [RZ] ;
+                              ... another 1 LDS ...
+        /*13f0*/              @!PT LDS RZ, [RZ] ;
+        /*1400*/                   LDGSTS.E.BYPASS.128 [R244+0x7000], [R4.64] ;
+        /*1410*/                   LDS.128 R180, [R246.X16+0x8000] ;
+        /*1420*/                   IADD3 R174, P0, R172, 0x18000, RZ ;
+        /*1430*/                   LDG.E.128 R220, [R176.64+0x200000] ;
+        /*1440*/                   IADD3 R178, P1, R172, 0x1c000, RZ ;
+        /*1450*/                   IMAD.X R175, RZ, RZ, R173.reuse, P0 ;
+        /*1460*/                   STG.E.128 [R2.64+0x110000], R192 ;
+        /*1470*/              @!PT LDS RZ, [RZ] ;
+                              ... another 1 LDS ...
+        /*1490*/              @!PT LDS RZ, [RZ] ;
+        /*14a0*/                   LDGSTS.E.BYPASS.128 [R244+0x8000], [R6.64] ;
+        /*14b0*/                   LDS.128 R188, [R246.X16+0x9000] ;
+        /*14c0*/                   LDG.E.128 R216, [R176.64+0x204000] ;
+        /*14d0*/                   IMAD.X R179, RZ, RZ, R173, P1 ;
+        /*14e0*/                   STG.E.128 [R2.64+0x114000], R180 ;
+        /*14f0*/              @!PT LDS RZ, [RZ] ;
+                              ... another 1 LDS ...
+        /*1510*/              @!PT LDS RZ, [RZ] ;
+        /*1520*/                   LDGSTS.E.BYPASS.128 [R244+0x9000], [R174.64] ;
+        /*1530*/                   LDS.128 R184, [R246.X16+0xa000] ;
+        /*1540*/                   IADD3 R192, P0, R172, 0x20000, RZ ;
+        /*1550*/                   LDG.E.128 R212, [R176.64+0x208000] ;
+        /*1560*/                   IADD3 R194, P1, R172, 0x24000, RZ ;
+        /*1570*/                   IMAD.X R193, RZ, RZ, R173.reuse, P0 ;
+        /*1580*/                   STG.E.128 [R2.64+0x118000], R188 ;
+        /*1590*/              @!PT LDS RZ, [RZ] ;
+                              ... another 1 LDS ...
+        /*15b0*/              @!PT LDS RZ, [RZ] ;
+        /*15c0*/                   LDGSTS.E.BYPASS.128 [R244+0xa000], [R178.64] ;
+        /*15d0*/                   LDS.128 R4, [R246.X16+0xb000] ;
+        /*15e0*/                   LDG.E.128 R208, [R176.64+0x20c000] ;
+        /*15f0*/                   IMAD.X R195, RZ, RZ, R173, P1 ;
+        /*1600*/                   STG.E.128 [R2.64+0x11c000], R184 ;
+        /*1610*/              @!PT LDS RZ, [RZ] ;
+                              ... another 1 LDS ...
+        /*1630*/              @!PT LDS RZ, [RZ] ;
+        /*1640*/                   LDGSTS.E.BYPASS.128 [R244+0xb000], [R192.64] ;
+        /*1650*/                   LDS.128 R180, [R246.X16+0xc000] ;
+        /*1660*/                   IADD3 R174, P0, R172, 0x28000, RZ ;
+        /*1670*/                   LDG.E.128 R204, [R176.64+0x210000] ;
+        /*1680*/                   IADD3 R178, P1, R172.reuse, 0x2c000, RZ ;
+        /*1690*/                   IMAD.X R175, RZ, RZ, R173.reuse, P0 ;
+        /*16a0*/                   STG.E.128 [R2.64+0x120000], R4 ;
+        /*16b0*/                   IMAD.X R179, RZ, RZ, R173, P1 ;
+        /*16c0*/              @!PT LDS RZ, [RZ] ;
+                              ... another 1 LDS ...
+        /*16e0*/              @!PT LDS RZ, [RZ] ;
+        /*16f0*/                   LDGSTS.E.BYPASS.128 [R244+0xc000], [R194.64] ;
+        /*1700*/                   LDS.128 R4, [R246.X16+0xd000] ;
+        /*1710*/                   LDG.E.128 R200, [R176.64+0x214000] ;
+        /*1720*/                   STG.E.128 [R2.64+0x124000], R180 ;
+        /*1730*/              @!PT LDS RZ, [RZ] ;
+                              ... another 1 LDS ...
+        /*1750*/              @!PT LDS RZ, [RZ] ;
+        /*1760*/                   LDGSTS.E.BYPASS.128 [R244+0xd000], [R174.64] ;
+        /*1770*/                   LDS.128 R180, [R246.X16+0xe000] ;
+        /*1780*/                   LDG.E.128 R196, [R176.64+0x218000] ;
+        /*1790*/                   STG.E.128 [R2.64+0x128000], R4 ;
+        /*17a0*/              @!PT LDS RZ, [RZ] ;
+                              ... another 1 LDS ...
+        /*17c0*/              @!PT LDS RZ, [RZ] ;
+        /*17d0*/                   LDGSTS.E.BYPASS.128 [R244+0xe000], [R178.64] ;
+        /*17e0*/                   LDS.128 R4, [R246.X16+0xf000] ;
+        /*17f0*/                   LDG.E.128 R192, [R176.64+0x21c000] ;
+        /*1800*/                   IADD3 R244, P0, R172, 0x30000, RZ ;
+        /*1810*/                   IMAD.SHL.U32 R178, R246, 0x10, RZ ;
+        /*1820*/                   IMAD.X R245, RZ, RZ, R173, P0 ;
+        /*1830*/                   STG.E.128 [R2.64+0x12c000], R180 ;
+        /*1840*/              @!PT LDS RZ, [RZ] ;
+                              ... another 1 LDS ...
+        /*1860*/              @!PT LDS RZ, [RZ] ;
+        /*1870*/                   LDGSTS.E.BYPASS.128 [R178+0xf000], [R244.64] ;
+        /*1880*/                   IADD3 R246, P0, R172, 0x34000, RZ ;
+        /*1890*/                   LDG.E.128 R188, [R176.64+0x220000] ;
+        /*18a0*/                   S2R R245, SR_TID.X ;
+        /*18b0*/                   IMAD.X R247, RZ, RZ, R173, P0 ;
+        /*18c0*/                   STG.E.128 [R2.64+0x130000], R4 ;
+        /*18d0*/                   LDS.128 R180, [R245.X16+0x10000] ;
+        /*18e0*/              @!PT LDS RZ, [RZ] ;
+                              ... another 1 LDS ...
+        /*1900*/              @!PT LDS RZ, [RZ] ;
+        /*1910*/                   LDGSTS.E.BYPASS.128 [R178+0x10000], [R246.64] ;
+        /*1920*/                   LDS.128 R4, [R245.X16+0x11000] ;
+        /*1930*/                   IADD3 R174, P0, R172, 0x38000, RZ ;
+        /*1940*/                   IMAD.MOV.U32 R179, RZ, RZ, 0x244000 ;
+        /*1950*/                   LDG.E.128 R184, [R176.64+0x224000] ;
+        /*1960*/                   IMAD.X R175, RZ, RZ, R173, P0 ;
+        /*1970*/                   IADD3 R172, R0, c[0x0][0x160], R179 ;
+        /*1980*/                   STG.E.128 [R2.64+0x134000], R180 ;
+        /*1990*/              @!PT LDS RZ, [RZ] ;
+                              ... another 1 LDS ...
+        /*19b0*/              @!PT LDS RZ, [RZ] ;
+        /*19c0*/                   LDGSTS.E.BYPASS.128 [R178+0x11000], [R174.64] ;
+        /*19d0*/                   IADD3 R174, P0, R172, 0x3c000, RZ ;
+        /*19e0*/                   LDG.E.128 R180, [R176.64+0x228000] ;
+        /*19f0*/                   IMAD.X R175, RZ, RZ, R173, P0 ;
+        /*1a00*/                   STG.E.128 [R2.64+0x138000], R4 ;
+        /*1a10*/                   LDS.128 R4, [R245.X16+0x12000] ;
+        /*1a20*/              @!PT LDS RZ, [RZ] ;
+                              ... another 1 LDS ...
+        /*1a40*/              @!PT LDS RZ, [RZ] ;
+        /*1a50*/                   LDGSTS.E.BYPASS.128 [R178+0x12000], [R174.64] ;
+        /*1a60*/                   S2R R175, SR_TID.X ;
+        /*1a70*/                   LDG.E.128 R176, [R176.64+0x22c000] ;
+        /*1a80*/                   LDS.128 R244, [R175.X16+0x13000] ;
+        /*1a90*/                   STG.E.128 [R2.64+0x13c000], R4 ;
+        /*1aa0*/                   IADD3 R172, P0, R172, 0x40000, RZ ;
+        /*1ab0*/                   IMAD.X R173, RZ, RZ, R173, P0 ;
+        /*1ac0*/                   LDL.LU R6, [R1] ;
+        /*1ad0*/                   IADD3 R4, P0, R0, c[0x0][0x160], RZ ;
+        /*1ae0*/                   IMAD.SHL.U32 R175, R175, 0x10, RZ ;
+        /*1af0*/                   IADD3.X R5, R252, c[0x0][0x164], RZ, P0, !PT ;
+        /*1b00*/              @!PT LDS RZ, [RZ] ;
+                              ... another 1 LDS ...
+        /*1b20*/              @!PT LDS RZ, [RZ] ;
+        /*1b30*/                   LDGSTS.E.BYPASS.128 [R175+0x13000], [R172.64] ;
+        /*1b40*/                   LDGDEPBAR ;
+        /*1b50*/                   LDG.E.128 R172, [R4.64+0x230000] ;
+        /*1b60*/                   STG.E.128 [R2.64+0x140000], R244 ;
+        /*1b70*/                   LDG.E.128 R244, [R4.64+0x234000] ;
+        /*1b80*/                   STG.E.128 [R2.64+0x144000], R168 ;
+        /*1b90*/                   LDG.E.128 R168, [R4.64+0x288000] ;
+        /*1ba0*/                   STG.E.128 [R2.64+0x148000], R164 ;
+        /*1bb0*/                   LDG.E.128 R164, [R4.64+0x28c000] ;
+        /*1bc0*/                   STG.E.128 [R2.64+0x14c000], R160 ;
+        /*1bd0*/                   LDG.E.128 R160, [R4.64+0x290000] ;
+        /*1be0*/                   STG.E.128 [R2.64+0x150000], R156 ;
+        /*1bf0*/                   LDG.E.128 R156, [R4.64+0x294000] ;
+        /*1c00*/                   STG.E.128 [R2.64+0x154000], R152 ;
+        /*1c10*/                   LDG.E.128 R152, [R4.64+0x298000] ;
+        /*1c20*/                   STG.E.128 [R2.64+0x158000], R148 ;
+        /*1c30*/                   LDG.E.128 R148, [R4.64+0x29c000] ;
+        /*1c40*/                   STG.E.128 [R2.64+0x15c000], R144 ;
+        /*1c50*/                   LDG.E.128 R144, [R4.64+0x2a0000] ;
+        /*1c60*/                   STG.E.128 [R2.64+0x160000], R140 ;
+        /*1c70*/                   LDG.E.128 R140, [R4.64+0x2a4000] ;
+        /*1c80*/                   STG.E.128 [R2.64+0x164000], R136 ;
+        /*1c90*/                   LDG.E.128 R136, [R4.64+0x2a8000] ;
+        /*1ca0*/                   STG.E.128 [R2.64+0x168000], R132 ;
+        /*1cb0*/                   LDG.E.128 R132, [R4.64+0x2ac000] ;
+        /*1cc0*/                   STG.E.128 [R2.64+0x16c000], R128 ;
+        /*1cd0*/                   LDG.E.128 R128, [R4.64+0x2b0000] ;
+        /*1ce0*/                   STG.E.128 [R2.64+0x170000], R124 ;
+        /*1cf0*/                   LDG.E.128 R124, [R4.64+0x2b4000] ;
+        /*1d00*/                   STG.E.128 [R2.64+0x174000], R120 ;
+        /*1d10*/                   LDG.E.128 R120, [R4.64+0x2b8000] ;
+        /*1d20*/                   STG.E.128 [R2.64+0x178000], R116 ;
+        /*1d30*/                   LDG.E.128 R116, [R4.64+0x2bc000] ;
+        /*1d40*/                   STG.E.128 [R2.64+0x17c000], R112 ;
+        /*1d50*/                   LDG.E.128 R112, [R4.64+0x2c0000] ;
+        /*1d60*/                   STG.E.128 [R2.64+0x180000], R108 ;
+        /*1d70*/                   LDG.E.128 R108, [R4.64+0x2c4000] ;
+        /*1d80*/                   STG.E.128 [R2.64+0x184000], R104 ;
+        /*1d90*/                   LDG.E.128 R104, [R4.64+0x2c8000] ;
+        /*1da0*/                   STG.E.128 [R2.64+0x188000], R100 ;
+        /*1db0*/                   LDG.E.128 R100, [R4.64+0x2cc000] ;
+        /*1dc0*/                   STG.E.128 [R2.64+0x18c000], R96 ;
+        /*1dd0*/                   LDG.E.128 R96, [R4.64+0x2d0000] ;
+        /*1de0*/                   STG.E.128 [R2.64+0x190000], R92 ;
+        /*1df0*/                   LDG.E.128 R92, [R4.64+0x2d4000] ;
+        /*1e00*/                   STG.E.128 [R2.64+0x194000], R88 ;
+        /*1e10*/                   LDG.E.128 R88, [R4.64+0x2d8000] ;
+        /*1e20*/                   STG.E.128 [R2.64+0x198000], R84 ;
+        /*1e30*/                   IADD3 R6, R6, 0x1, RZ ;
+        /*1e40*/                   LDG.E.128 R84, [R4.64+0x2dc000] ;
+        /*1e50*/                   STG.E.128 [R2.64+0x19c000], R80 ;
+        /*1e60*/                   LDG.E.128 R80, [R4.64+0x2e0000] ;
+        /*1e70*/                   STG.E.128 [R2.64+0x1a0000], R76 ;
+        /*1e80*/                   LDG.E.128 R76, [R4.64+0x2e4000] ;
+        /*1e90*/                   STG.E.128 [R2.64+0x1a4000], R72 ;
+        /*1ea0*/                   LDG.E.128 R72, [R4.64+0x2e8000] ;
+        /*1eb0*/                   STG.E.128 [R2.64+0x1a8000], R68 ;
+        /*1ec0*/                   STL [R1], R6 ;
+        /*1ed0*/                   LDG.E.128 R68, [R4.64+0x2ec000] ;
+        /*1ee0*/                   STG.E.128 [R2.64+0x1ac000], R64 ;
+        /*1ef0*/                   ISETP.NE.AND P0, PT, R6, 0x200, PT ;
+        /*1f00*/                   LDG.E.128 R64, [R4.64+0x2f0000] ;
+        /*1f10*/                   STG.E.128 [R2.64+0x1b0000], R60 ;
+        /*1f20*/                   LDG.E.128 R60, [R4.64+0x2f4000] ;
+        /*1f30*/                   STG.E.128 [R2.64+0x1b4000], R56 ;
+        /*1f40*/                   LDG.E.128 R56, [R4.64+0x2f8000] ;
+        /*1f50*/                   STG.E.128 [R2.64+0x1b8000], R52 ;
+        /*1f60*/                   LDG.E.128 R52, [R4.64+0x2fc000] ;
+        /*1f70*/                   STG.E.128 [R2.64+0x1bc000], R48 ;
+        /*1f80*/                   LDG.E.128 R48, [R4.64+0x300000] ;
+        /*1f90*/                   STG.E.128 [R2.64+0x1c0000], R44 ;
+        /*1fa0*/                   IADD3 R0, P1, R0, 0x144000, RZ ;
+        /*1fb0*/                   LDG.E.128 R44, [R4.64+0x304000] ;
+        /*1fc0*/                   STG.E.128 [R2.64+0x1c4000], R40 ;
+        /*1fd0*/                   LDG.E.128 R40, [R4.64+0x308000] ;
+        /*1fe0*/                   STG.E.128 [R2.64+0x1c8000], R36 ;
+        /*1ff0*/                   LDG.E.128 R36, [R4.64+0x30c000] ;
+        /*2000*/                   STG.E.128 [R2.64+0x1cc000], R32 ;
+        /*2010*/                   IMAD.X R252, RZ, RZ, R252, P1 ;
+        /*2020*/                   LDG.E.128 R32, [R4.64+0x310000] ;
+        /*2030*/                   STG.E.128 [R2.64+0x1d0000], R28 ;
+        /*2040*/                   LDG.E.128 R28, [R4.64+0x314000] ;
+        /*2050*/                   STG.E.128 [R2.64+0x1d4000], R24 ;
+        /*2060*/                   LDG.E.128 R24, [R4.64+0x318000] ;
+        /*2070*/                   STG.E.128 [R2.64+0x1d8000], R20 ;
+        /*2080*/                   LDG.E.128 R20, [R4.64+0x31c000] ;
+        /*2090*/                   STG.E.128 [R2.64+0x1dc000], R16 ;
+        /*20a0*/                   LDG.E.128 R16, [R4.64+0x320000] ;
+        /*20b0*/                   STG.E.128 [R2.64+0x1e0000], R12 ;
+        /*20c0*/                   LDG.E.128 R12, [R4.64+0x324000] ;
+        /*20d0*/                   STG.E.128 [R2.64+0x1e4000], R8 ;
+        /*20e0*/                   LDG.E.128 R8, [R4.64+0x328000] ;
+        /*20f0*/                   STG.E.128 [R2.64+0x1e8000], R248 ;
+                                   ... another 18 STG.E.128 ...
+        /*2220*/                   STG.E.128 [R2.64+0x234000], R244 ;
+        /*2230*/               @P0 BRA 0xf10 ;
+        /*2240*/                   S2R R7, SR_TID.X ;
+        /*2250*/                   DEPBAR.LE SB0, 0x0 ;
+        /*2260*/                   S2R R5, SR_TID.X ;
+        /*2270*/                   IMAD.MOV.U32 R4, RZ, RZ, 0x10 ;
+        /*2280*/                   S2R R6, SR_CTAID.X ;
+        /*2290*/                   LDS.128 R172, [R7.X16] ;
+                                   ... another 1 LDS.128 ...
+        /*22b0*/                   LDS.128 R188, [R7.X16+0x2000] ;
+        /*22c0*/                   IMAD R6, R6, 0x100, R5 ;
+        /*22d0*/                   LDS.128 R200, [R7.X16+0x3000] ;
+        /*22e0*/                   IMAD.WIDE R2, R6, R4, c[0x0][0x168] ;
+        /*22f0*/                   LDS.128 R212, [R7.X16+0x4000] ;
+        /*2300*/                   IMAD.WIDE R4, R6, R4, c[0x0][0x160] ;
+        /*2310*/                   IADD3 R2, P0, R2, 0x29000000, RZ ;
+        /*2320*/                   LDS.128 R192, [R7.X16+0x5000] ;
+        /*2330*/                   IADD3 R4, P1, R4, 0x29000000, RZ ;
+        /*2340*/                   IMAD.X R3, RZ, RZ, R3, P0 ;
+        /*2350*/                   LDS.128 R204, [R7.X16+0x6000] ;
+        /*2360*/                   IMAD.X R5, RZ, RZ, R5, P1 ;
+        /*2370*/                   LDS.128 R224, [R7.X16+0x7000] ;
+                                   ... another 1 LDS.128 ...
+        /*2390*/                   LDS.128 R232, [R7.X16+0x9000] ;
+        /*23a0*/                   STG.E.128 [R2.64+-0x70c000], R172 ;
+        /*23b0*/                   LDG.E.128 R248, [R4.64+-0x618000] ;
+        /*23c0*/                   STG.E.128 [R2.64+-0x708000], R184 ;
+        /*23d0*/                   LDG.E.128 R180, [R4.64+-0x614000] ;
+        /*23e0*/                   LDS.128 R236, [R7.X16+0xa000] ;
+        /*23f0*/                   STG.E.128 [R2.64+-0x704000], R188 ;
+        /*2400*/                   LDG.E.128 R176, [R4.64+-0x610000] ;
+        /*2410*/                   LDS.128 R240, [R7.X16+0xb000] ;
+        /*2420*/                   STG.E.128 [R2.64+-0x700000], R200 ;
+        /*2430*/                   LDG.E.128 R172, [R4.64+-0x60c000] ;
+        /*2440*/                   LDS.128 R244, [R7.X16+0xc000] ;
+        /*2450*/                   STG.E.128 [R2.64+-0x6fc000], R212 ;
+        /*2460*/                   LDS.128 R184, [R7.X16+0xd000] ;
+        /*2470*/                   LDG.E.128 R188, [R4.64+-0x608000] ;
+        /*2480*/                   STG.E.128 [R2.64+-0x6f8000], R192 ;
+        /*2490*/                   LDS.128 R192, [R7.X16+0xe000] ;
+        /*24a0*/                   LDS.128 R196, [R7.X16+0xf000] ;
+        /*24b0*/                   LDG.E.128 R200, [R4.64+-0x604000] ;
+        /*24c0*/                   STG.E.128 [R2.64+-0x6f4000], R204 ;
+        /*24d0*/                   LDS.128 R204, [R7.X16+0x10000] ;
+                                   ... another 2 LDS.128 ...
+        /*2500*/                   LDS.128 R216, [R7.X16+0x13000] ;
+        /*2510*/                   LDG.E.128 R220, [R4.64+-0x600000] ;
+        /*2520*/                   STG.E.128 [R2.64+-0x6f0000], R224 ;
+        /*2530*/                   LDG.E.128 R224, [R4.64+-0x5fc000] ;
+        /*2540*/                   STG.E.128 [R2.64+-0x6ec000], R228 ;
+        /*2550*/                   LDG.E.128 R228, [R4.64+-0x5f8000] ;
+        /*2560*/                   STG.E.128 [R2.64+-0x6e8000], R232 ;
+        /*2570*/                   LDG.E.128 R232, [R4.64+-0x5f4000] ;
+        /*2580*/                   STG.E.128 [R2.64+-0x6e4000], R236 ;
+        /*2590*/                   LDG.E.128 R236, [R4.64+-0x5f0000] ;
+        /*25a0*/                   STG.E.128 [R2.64+-0x6e0000], R240 ;
+        /*25b0*/                   LDG.E.128 R240, [R4.64+-0x5ec000] ;
+        /*25c0*/                   STG.E.128 [R2.64+-0x6dc000], R244 ;
+        /*25d0*/                   LDG.E.128 R244, [R4.64+-0x5e8000] ;
+        /*25e0*/                   STG.E.128 [R2.64+-0x6d8000], R184 ;
+        /*25f0*/                   LDG.E.128 R184, [R4.64+-0x5e4000] ;
+        /*2600*/                   STG.E.128 [R2.64+-0x6d4000], R192 ;
+        /*2610*/                   LDG.E.128 R192, [R4.64+-0x5e0000] ;
+        /*2620*/                   STG.E.128 [R2.64+-0x6d0000], R196 ;
+        /*2630*/                   LDG.E.128 R196, [R4.64+-0x5dc000] ;
+        /*2640*/                   STG.E.128 [R2.64+-0x6cc000], R204 ;
+        /*2650*/                   LDG.E.128 R204, [R4.64+-0x5d8000] ;
+        /*2660*/                   STG.E.128 [R2.64+-0x6c8000], R208 ;
+        /*2670*/                   LDG.E.128 R208, [R4.64+-0x5d4000] ;
+        /*2680*/                   STG.E.128 [R2.64+-0x6c4000], R212 ;
+        /*2690*/                   LDG.E.128 R212, [R4.64+-0x5d0000] ;
+        /*26a0*/                   STG.E.128 [R2.64+-0x6c0000], R216 ;
+        /*26b0*/                   LDG.E.128 R216, [R4.64+-0x5cc000] ;
+        /*26c0*/                   STG.E.128 [R2.64+-0x6bc000], R168 ;
+                                   ... another 59 STG.E.128 ...
+        /*2a80*/                   STG.E.128 [R2.64+-0x5cc000], R216 ;
+        /*2a90*/                   EXIT ;
+        /*2aa0*/                   BRA 0x2aa0;
+        /*2ab0*/                   NOP;
+                                   ... another 11 NOP ...
+        /*2b70*/                   NOP;
+		..........
+
+

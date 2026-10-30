@@ -1,0 +1,54 @@
+On my old GPU, two SMs saturates
+
+on a 3060 with 317 GB/s:
+dev 0 has:
+28 SMs
+1024 maxThreadsPerBlock
+1536 maxThreadsPerSM
+1024 max x, 1024 max y, 64 max z
+65536 regsPerBlock
+65536 regsPerMultiprocessor
+NUMEL: 2097152
+SMALL_SMs_USED: 4
+LARGE_SMs_USED: 16
+ms/N_its: 0.059041
+equal: 1
+mms/N_its: 0.055850
+equal: 1
+
+on an a100 with 1310 GB/s:
+dev 0 has:
+108 SMs
+1024 maxThreadsPerBlock
+2048 maxThreadsPerSM
+1024 max x, 1024 max y, 64 max z
+65536 regsPerBlock
+65536 regsPerMultiprocessor
+NUMEL: 8388608
+LARGE_SMs_USED: 64
+SMALL_SMs_USED: 32
+ms/N_its: 0.065065
+equal: 1
+mms/N_its: 0.055521
+equal: 1
+
+on an h100 with 2444.6 GB/s, this is the result:
+dev 0 has:
+132 SMs
+1024 maxThreadsPerBlock
+2048 maxThreadsPerSM
+1024 max x, 1024 max y, 64 max z
+65536 regsPerBlock
+65536 regsPerMultiprocessor
+NUMEL: 8388608
+LARGE_SMs_USED: 64
+SMALL_SMs_USED: 32
+ms/N_its: 0.042453
+equal: 1
+mms/N_its: 0.030628
+equal: 1
+
+
+
+We also see that, when unsaturated, 2x less SMs results in less than 2x slowdown (i.e., doubling SMs is less efficient than 2x speed of current SMs).
+I'm sure that this is due to the fact that you have more epilogues (where not all threads are being utilized for an in-flight request).

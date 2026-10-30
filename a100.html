@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.19">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Ethan Sirois">
+
+<title>A100 HBM Saturation with Minimal SMs</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="a100_files/libs/clipboard/clipboard.min.js"></script>
+<script src="a100_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="a100_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="a100_files/libs/quarto-html/popper.min.js"></script>
+<script src="a100_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="a100_files/libs/quarto-html/anchor.min.js"></script>
+<link href="a100_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="a100_files/libs/quarto-html/quarto-syntax-highlighting-bf27225e3a48a9273f3daa8f8e829971.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="a100_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="a100_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="a100_files/libs/bootstrap/bootstrap-c0ed0701ab40f6c26a436364f699b37c.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+</head>
+
+<body class="fullcontent quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">A100 HBM Saturation with Minimal SMs</h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading"></div>
+    <div class="quarto-title-meta-contents">
+             <p>Ethan Sirois <a href="mailto:ethansirois3@gmail.com" class="quarto-title-author-email"><i class="bi bi-envelope"></i></a> </p>
+          </div>
+  </div>
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="note" class="level4 unnumbered">
+<h4 class="unnumbered anchored" data-anchor-id="note">Note:</h4>
+<p>This was <em>NOT</em> written with the assistance of an LLM. I thought-out and typed every single character. I hope that this is more digestable than most recent technical writing.</p>
+<p>I try to verify facts, observations, and ideas, but I may make mistakes. <strong>Please <a href="mailto:ethansirois3@gmail.com">inform me</a></strong> of any incorrect information (or differing opinions)!</p>
+</section>
+<section id="introduction" class="level2" data-number="1">
+<h2 data-number="1" class="anchored" data-anchor-id="introduction"><span class="header-section-number">1</span> Introduction</h2>
+<p>The goal of this work is to see how few SMs we can use to saturate the HBM of an A100, and explain hardware fundamentals along the way.</p>
+</section>
+<section id="background" class="level2" data-number="2">
+<h2 data-number="2" class="anchored" data-anchor-id="background"><span class="header-section-number">2</span> Background</h2>
+<p>This problem is interesting to me for several reasons.</p>
+<p>First, its relevance (to me) comes from the fact that we see an emergence of <em>warp-specialization</em> in performant GPU kernels, i.e., where we have a group of <em>producer</em> warps that solely focus on transporting data to the GPU (shared memory, tensor memory), and a group of <em>consumer</em> warps that focus on using transported data for computation (and also do the write-back, since that is cheap).<br>
+Thus, if we can keep our producer warps as light as possible (only one SM per GPC, or most ideally, one light-weight warp per SM), this frees up many valuable resources (registers) for our consumer warp groups.</p>
+<p>Second, I love optimizing things in constrained environments. It’s like a puzzle that tests your understanding of the problem and the hardware (and compiler and operating system), and it requires you to be conscious about every single instruction that executes. (This is why I love programming in RISC ISAs<a href="#fn1" class="footnote-ref" id="fnref1" role="doc-noteref"><sup>1</sup></a> and C.)<br>
+</p>
+</section>
+<section id="strategies" class="level2" data-number="3">
+<h2 data-number="3" class="anchored" data-anchor-id="strategies"><span class="header-section-number">3</span> Strategies</h2>
+<p>This first set of kernels has the objective of saturating the HBM with as little SMs as possible</p>
+<section id="kernel-k0-straightforward" class="level3" data-number="3.1">
+<h3 data-number="3.1" class="anchored" data-anchor-id="kernel-k0-straightforward"><span class="header-section-number">3.1</span> Kernel k0 — straightforward</h3>
+<p>For a simple kernel that doesn’t utilize any special PTX instructions, the following was clear to me:</p>
+<ul>
+<li>We want to do the most simple thing, a vector “memcpy”, i.e., <code>B[i] = A[i] for i in [0..n-1]</code></li>
+<li>Most obviously, we want our intra-warp memory accesses to be coalesced (and generally coalesced inter-warp<a href="#fn2" class="footnote-ref" id="fnref2" role="doc-noteref"><sup>2</sup></a>)
+<ul>
+<li>We can achieve this via each thread accessing a contiguous 16-byte (<code>float4</code>) element based on <code>threadIdx.x</code>. Then, a warp accesses <span class="math inline">\(16 \times 32 = 512\)</span> contiguous bytes</li>
+</ul></li>
+<li>We want to maximally utilize the registers of our SMs
+<ul>
+<li>Each four-register group (because each register is 32-bits and we are using <code>float4</code> which grabs four contiguous <code>fp32</code>) can be used to load data. Thus, outside of setting aside some registers for our pointers and address calculation, we want to maximize the number of four-register groups that have pending data in-flight from global memory</li>
+</ul></li>
+<li>We want one, persistent block per SM
+<ul>
+<li>Having multiple blocks per-SM is pointless, and makes our SM-counting very difficult, so let’s use one block per SM. Plus, one persistent block is much more performant, since a new block has to awkwardly fill the empty pipeline with loads before it can start issuing stores. One persistent block can continuously load future data while issuing stores (yay pipelining!)</li>
+</ul></li>
+<li>It’s easier to let the compiler optimize things if everything is a constant expression (known at compile-time), and for simplicity (and performance), everything is a power-of-two
+<ul>
+<li>This means compile-time vector length, which unrolls the copy loop, which creates compile-time address offsets (SASS supports constant address offsets up to )</li>
+</ul></li>
+<li>We want each thread to have the maximum number of registers (255)
+<ul>
+<li>Maximal register usage per-thread will allow for the least warp-switching, and more-importantly, means the less redundancy of storing arguments (since each thread needs the pointers in its own registers)</li>
+<li>Modern SMs have 64K registers per SM, so with a limit of 255 registers per thread, this gives <span class="math inline">\(\frac{64 \times 1024}{256} = 256\)</span> threads per SM</li>
+</ul></li>
+</ul>
+<p>With all of this in place, we can get to the following simple kernel:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode cpp code-with-copy"><code class="sourceCode cpp"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">constexpr</span> <span class="dt">int</span> SMALL_NUM_STEPS <span class="op">=</span> NUM_THREAD_BLOCKS_NEEDED <span class="op">/</span> SMALL_SMs_USED<span class="op">;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>__global__ <span class="dt">void</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>small_SMs<span class="op">(</span><span class="at">const</span> float4<span class="op">*</span> <span class="ex">__restrict__</span> dA<span class="op">,</span> float4<span class="op">*</span> <span class="ex">__restrict__</span> dB<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">constexpr</span> <span class="dt">int</span> step <span class="op">=</span> BLOCKS_PER_SM <span class="op">*</span> SMALL_SMs_USED <span class="op">*</span> THREADS_PER_BLOCK<span class="op">;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> <span class="dt">int</span> idx <span class="op">=</span> blockIdx<span class="op">.</span>x <span class="op">*</span> THREADS_PER_BLOCK <span class="op">+</span> threadIdx<span class="op">.</span>x<span class="op">;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="pp">#pragma unroll</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> SMALL_NUM_STEPS<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>        dB<span class="op">[</span>i <span class="op">*</span> step <span class="op">+</span> idx<span class="op">]</span> <span class="op">=</span> dA<span class="op">[</span>i <span class="op">*</span> step <span class="op">+</span> idx<span class="op">];</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>So nice and simple. (You can see that I love compiler hints; we’ll see the emergence of more hints later.)</p>
+<section id="idea" class="level4" data-number="3.1.1">
+<h4 data-number="3.1.1" class="anchored" data-anchor-id="idea"><span class="header-section-number">3.1.1</span> Idea</h4>
+<p>What about enqueuing multiple loads before then trying to store? E.g., instead of <code>load A[0], store A[0], load A[1], store A[1]</code>, we can do <code>load A[0], load A[1], store A[0], store A[1]</code>, as this separates dependencies?<br>
+Thankfully, the compiler will handle this for us when generating the SASS! (This is called instruction scheduling.)</p>
+</section>
+<section id="k0_expectation" class="level4" data-number="3.1.2">
+<h4 data-number="3.1.2" class="anchored" data-anchor-id="k0_expectation"><span class="header-section-number">3.1.2</span> Expectation</h4>
+<p>Let’s run some back-of-the-envelope math (what inspired this). Resources suggest that:</p>
+<ul>
+<li>An HBM request takes ~500 core cycles</li>
+<li>An A100 has 80 memory channels, each channel serving many banks</li>
+<li>To fully saturate a channel, you should have ~21 128B requests per channel (because it’s heavily pipelined)</li>
+</ul>
+<p><em>Note:</em> &nbsp;I decided to pause my deep-dive on the HBM2 internals (via <a href="https://www.jedec.org/sites/default/files/docs/JESD235D.pdf">the open-standard</a>) to get through the rest of this, but this is safely an over-approximation of what the A100 is capable of. This section just gives a very general idea of expectation, but it intentionally lacks specifics (until I learn more).</p>
+<p>Thus, we can determine that we need <span class="math inline">\(21 \times 128 \times 80\)</span> bytes being simultaneously served over 500 clock cycles.</p>
+<p>So with each thread containing 255 registers, say it uses 248 for memory operations, then each thread can contribute <span class="math inline">\(248 \times 4\)</span> bytes. With this being vectorized into 4, we issue 62 instructions to achieve this, and with pipelining, it <em>seems</em> reasonable to expect this to execute within 500 cycles.</p>
+<p>This then implies that we only need <span class="math inline">\(\frac{21 \times 128 \times 80}{248 \times 4} &lt; \frac{21 \times 128 \times 80}{21 \times 4 \times 11} &lt; 32 \times 8 = 256\)</span> threads, which can fit into a single SM!</p>
+<p>Except this is only going to saturate the HBM for one memory cycle. Let’s break it down.<br>
+From a single SM’s perspective, it will take one memory cycle to prepare the DRAM and then one memory cycle of full utilization to get the data it requested. It will then send data to store and then follow this up with another load.<br>
+But the store will require one memory cycle to get ready, so we can see that a single SM saturates the HBM every-other memory cycle. This implies that we would require two SMs to fully saturate the HBM (besides the first memory cycle, which will always be empty).</p>
+<p>This makes two key (and false) assumptions about memory:</p>
+<p>(1) The actual transfer of data between the SM and DRAM is instantaneous, but it requires one memory cycle for it to actually be read/written from/into the DRAM.<br>
+(2) There is no limit to how many memory requests an SM can issue and how much data it can await/outstanding.</p>
+<p>I think that (1) is not too inaccurate in terms of data transportation speed, but I know that it is especially limited by the fact that each bus can only tranport data <em>unidirectionally</em>, i.e., it can only be transporting data from DRAM to SM, or SM to DRAM.<br>
+So, if you want to issue a store after reading, you’ll have to wait for the read to finish using the bus before you can send your store on the bus.</p>
+<p>There are some more ways of limit-testing this that I hope to expand upon further in the future. For instance, to counter the load vs store of (1), you can have a <em>read-heavy</em> kernel rather than a memory-transfer kernel. E.g., summing a vector.</p>
+<p>Testing (2) would be possible via using half the registers and double the SMs, for instance.</p>
+</section>
+<section id="result" class="level4" data-number="3.1.3">
+<h4 data-number="3.1.3" class="anchored" data-anchor-id="result"><span class="header-section-number">3.1.3</span> Result</h4>
+<p>Alas, when we test, we observe that it takes <strong>34 SMs</strong> to reach HBM saturation on our A100 (btw, this is an A100 SXM4 with 1310 GB/s, and it has 108 SMs total).</p>
+<p>Now, of course there are those two limitations I stated above, and there is plenty of room for optimizations (skipping caching, <code>cp.async</code>, prefetching), but this is worse than I expected.</p>
+</section>
+<section id="k0_explanation" class="level4" data-number="3.1.4">
+<h4 data-number="3.1.4" class="anchored" data-anchor-id="k0_explanation"><span class="header-section-number">3.1.4</span> Explanation</h4>
+<p>So, what do we hope that the generated SASS looks like? It would be something like the following:</p>
+<ul>
+<li>The code utilizes ~248 registers, so 62 <code>float4</code> loads in-flight simultaneously</li>
+<li><code>ptxas</code> then beautifully interleaves loads/stores into an optimal arrangement so that we have many loads in-flight simultaneously (and give each load some time before we require its data), e.g.,</li>
+</ul>
+<div id="lst-sched" class="listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-sched-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;1: Desired load/store schedule
+</figcaption>
+<div aria-describedby="lst-sched-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre><code>load    A[0..61], 
+store   A[0..7], 
+load    (A+62)[0..7], 
+store   (A+8)[0..7], 
+...
+load    (A+n-1-8)[0..7]
+store   (A+n-1-62)[0..62]</code></pre>
+</div>
+</figure>
+</div>
+<p>But when we <a href="TODO">look at the sass</a>, it’s unfortunately quite different:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode nvsass code-with-copy"><code class="sourceCode nvsass"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co">// ...</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="an">/*0070*/</span>  <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R8</span>, [<span class="dt">R32.64</span>] ;       </span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="an">/*0080*/</span>  <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R20</span>, [<span class="dt">R32.64</span>+<span class="bn">0x4000</span>] ;  </span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="an">/*0090*/</span>  <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R4</span>, [<span class="dt">R32.64</span>+<span class="bn">0x8000</span>] ;   </span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="an">/*00a0*/</span>  <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R16</span>, [<span class="dt">R32.64</span>+<span class="bn">0xc000</span>] ;  </span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="an">/*00b0*/</span>  <span class="kw">IMAD.WIDE</span> <span class="dt">R30</span>, <span class="dt">R30</span>, <span class="dt">R31</span>, <span class="ot">c[0x0][0x168]</span> ;   </span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="an">/*00c0*/</span>  <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R12</span>, [<span class="dt">R32.64</span>+<span class="bn">0x10000</span>] ; </span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="co">// store R8</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="an">/*00d0*/</span>  <span class="kw">STG.E.128</span> [<span class="dt">R30.64</span>], <span class="dt">R8</span> ;        </span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="co">// now we can start another load into R8           </span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="an">/*00e0*/</span>  <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R8</span>, [<span class="dt">R32.64</span>+<span class="bn">0x14000</span>] ;  </span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a><span class="co">// same with R20</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a><span class="an">/*00f0*/</span>  <span class="kw">STG.E.128</span> [<span class="dt">R30.64</span>+<span class="bn">0x4000</span>], <span class="dt">R20</span> ;           </span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a><span class="an">/*0100*/</span>  <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R20</span>, [<span class="dt">R32.64</span>+<span class="bn">0x18000</span>] ;</span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a><span class="co">// etc... </span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a><span class="an">/*0110*/</span>  <span class="kw">STG.E.128</span> [<span class="dt">R30.64</span>+<span class="bn">0x8000</span>], <span class="dt">R4</span> ;            </span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a><span class="an">/*0120*/</span>  <span class="kw">STG.E.128</span> [<span class="dt">R30.64</span>+<span class="bn">0xc000</span>], <span class="dt">R16</span> ;           </span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a><span class="an">/*0130*/</span>  <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R4</span>, [<span class="dt">R32.64</span>+<span class="bn">0x1c000</span>] ;  </span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a><span class="an">/*0140*/</span>  <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R16</span>, [<span class="dt">R32.64</span>+<span class="bn">0x20000</span>] ; </span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a><span class="an">/*0150*/</span>  <span class="kw">STG.E.128</span> [<span class="dt">R30.64</span>+<span class="bn">0x10000</span>], <span class="dt">R12</span> ;          </span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a><span class="an">/*0160*/</span>  <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R12</span>, [<span class="dt">R32.64</span>+<span class="bn">0x24000</span>] ; </span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a><span class="an">/*0170*/</span>  <span class="kw">STG.E.128</span> [<span class="dt">R30.64</span>+<span class="bn">0x14000</span>], <span class="dt">R8</span> ;     </span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a><span class="co">// ...      </span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p><em>Note:</em> &nbsp;This would be much worse, a serialized stream of <code>read 0, write 0, read 1, write 1</code>, if we don’t have the <code>__restrict__</code> keyword. <a href="TODO">See the SASS here</a>.</p>
+<p>It has the essence of what we hoped for, just only using 40 registers <em>total</em>, and only 20 for loads (5 four-register groups).</p>
+<p>This was incredibly confusing to me at first. We launch the kernel with a block size of 256 threads, which is known at compile-time. The kernel’s function name gets mangled<a href="#fn3" class="footnote-ref" id="fnref3" role="doc-noteref"><sup>3</sup></a> (because it’s not <code>extern</code>ed), so there’s not even the chance that an outside function could invoke our kernel…<br>
+Regardless, after some head-scratching, it turns out that we need to set the <code>__launch_bounds__(256, 1)</code> to specify that this kernel will not be called with more than 256 threads per block (and 1 block per SM). (Thanks AI!)</p>
+</section>
+</section>
+<section id="kernel-k0_bounds-launch_bounds" class="level3" data-number="3.2">
+<h3 data-number="3.2" class="anchored" data-anchor-id="kernel-k0_bounds-launch_bounds"><span class="header-section-number">3.2</span> Kernel k0_bounds — launch_bounds</h3>
+<p>So we have the same kernel as above just with the compiler hint added:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode c++ code-with-copy"><code class="sourceCode cpp"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>__global__ <span class="dt">void</span> </span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>__launch_bounds__<span class="op">(</span>THREADS_PER_BLOCK<span class="op">,</span> BLOCKS_PER_SM<span class="op">)</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>small_SMs<span class="op">(</span><span class="at">const</span> float4<span class="op">*</span> <span class="ex">__restrict__</span> dA<span class="op">,</span> float4<span class="op">*</span> <span class="ex">__restrict__</span> dB<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> <span class="dt">int</span> step <span class="op">=</span> BLOCKS_PER_SM <span class="op">*</span> SMALL_SMs_USED <span class="op">*</span> THREADS_PER_BLOCK<span class="op">;</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> <span class="dt">int</span> idx <span class="op">=</span> blockIdx<span class="op">.</span>x <span class="op">*</span> THREADS_PER_BLOCK <span class="op">+</span> threadIdx<span class="op">.</span>x<span class="op">;</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    <span class="pp">#pragma unroll</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> SMALL_NUM_STEPS<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>        dB<span class="op">[</span>i <span class="op">*</span> step <span class="op">+</span> idx<span class="op">]</span> <span class="op">=</span> dA<span class="op">[</span>i <span class="op">*</span> step <span class="op">+</span> idx<span class="op">];</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<section id="result-1" class="level4" data-number="3.2.1">
+<h4 data-number="3.2.1" class="anchored" data-anchor-id="result-1"><span class="header-section-number">3.2.1</span> Result</h4>
+<p>The SASS is much better! It now uses nearly all registers (61 four-register groups):</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5"><pre class="sourceCode nvsass code-with-copy"><code class="sourceCode nvsass"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="an">/*0070*/</span>   <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R20</span>, [<span class="dt">R2.64</span>] ;         </span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="an">/*0080*/</span>   <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R48</span>, [<span class="dt">R2.64</span>+<span class="bn">0x24000</span>] ; </span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="an">/*0090*/</span>   <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R60</span>, [<span class="dt">R2.64</span>+<span class="bn">0x18000</span>] ; </span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">// ... many loads</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="an">/*0440*/</span>   <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R244</span>, [<span class="dt">R2.64</span>+<span class="bn">0x3c000</span>] ; </span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="an">/*0450*/</span>   <span class="kw">STG.E.128</span> [<span class="dt">R248.64</span>], <span class="dt">R20</span> ;                 </span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="an">/*0460*/</span>   <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R20</span>, [<span class="dt">R2.64</span>+<span class="bn">0xe8000</span>] ;  </span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="an">/*0470*/</span>   <span class="kw">STG.E.128</span> [<span class="dt">R248.64</span>+<span class="bn">0x24000</span>], <span class="dt">R48</span> ;         </span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a><span class="an">/*0480*/</span>   <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R48</span>, [<span class="dt">R2.64</span>+<span class="bn">0xf8000</span>] ;  </span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="an">/*0490*/</span>   <span class="kw">STG.E.128</span> [<span class="dt">R248.64</span>+<span class="bn">0x18000</span>], <span class="dt">R60</span> ;         </span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a><span class="an">/*04a0*/</span>   <span class="kw">STG.E.128</span> [<span class="dt">R248.64</span>+<span class="bn">0x28000</span>], <span class="dt">R112</span> ;        </span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a><span class="an">/*04b0*/</span>   <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R60</span>, [<span class="dt">R2.64</span>+<span class="bn">0x114000</span>] ; </span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a><span class="an">/*04c0*/</span>   <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R112</span>, [<span class="dt">R2.64</span>+<span class="bn">0x104000</span>] ;</span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a><span class="an">/*04d0*/</span>   <span class="kw">STG.E.128</span> [<span class="dt">R248.64</span>+<span class="bn">0x8000</span>], <span class="dt">R120</span> ;         </span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a><span class="an">/*04e0*/</span>   <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R120</span>, [<span class="dt">R2.64</span>+<span class="bn">0xfc000</span>] ; </span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a><span class="an">/*04f0*/</span>   <span class="kw">STG.E.128</span> [<span class="dt">R248.64</span>+<span class="bn">0x6c000</span>], <span class="dt">R40</span> ;         </span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a><span class="an">/*0500*/</span>   <span class="kw">STG.E.128</span> [<span class="dt">R248.64</span>+<span class="bn">0xc000</span>], <span class="dt">R172</span> ;         </span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a><span class="an">/*0510*/</span>   <span class="kw">STG.E.128</span> [<span class="dt">R248.64</span>+<span class="bn">0x10000</span>], <span class="dt">R188</span> ;        </span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a><span class="an">/*0520*/</span>   <span class="kw">STG.E.128</span> [<span class="dt">R248.64</span>+<span class="bn">0x14000</span>], <span class="dt">R204</span> ;        </span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a><span class="an">/*0530*/</span>   <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R40</span>, [<span class="dt">R2.64</span>+<span class="bn">0x14c000</span>] ; </span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a><span class="an">/*0540*/</span>   <span class="kw">STG.E.128</span> [<span class="dt">R248.64</span>+<span class="bn">0x1c000</span>], <span class="dt">R196</span> ;        </span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a><span class="an">/*0550*/</span>   <span class="kw">STG.E.128</span> [<span class="dt">R248.64</span>+<span class="bn">0x20000</span>], <span class="dt">R200</span> ;        </span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a><span class="an">/*0560*/</span>   <span class="kw">STG.E.128</span> [<span class="dt">R248.64</span>+<span class="bn">0x50000</span>], <span class="dt">R104</span> ;        </span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a><span class="an">/*0570*/</span>   <span class="kw">STG.E.128</span> [<span class="dt">R248.64</span>+<span class="bn">0x54000</span>], <span class="dt">R168</span> ;        </span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a><span class="an">/*0580*/</span>   <span class="kw">STG.E.128</span> [<span class="dt">R248.64</span>+<span class="bn">0x58000</span>], <span class="dt">R72</span> ;         </span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a><span class="an">/*0590*/</span>   <span class="kw">STG.E.128</span> [<span class="dt">R248.64</span>+<span class="bn">0x5c000</span>], <span class="dt">R88</span> ;         </span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a><span class="an">/*05a0*/</span>   <span class="kw">STG.E.128</span> [<span class="dt">R248.64</span>+<span class="bn">0x60000</span>], <span class="dt">R180</span> ;        </span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a><span class="an">/*05b0*/</span>   <span class="kw">STG.E.128</span> [<span class="dt">R248.64</span>+<span class="bn">0x64000</span>], <span class="dt">R44</span> ;         </span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a><span class="an">/*05c0*/</span>   <span class="kw">STG.E.128</span> [<span class="dt">R248.64</span>+<span class="bn">0x68000</span>], <span class="dt">R96</span> ;         </span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a><span class="an">/*05d0*/</span>   <span class="kw">STG.E.128</span> [<span class="dt">R248.64</span>+<span class="bn">0x74000</span>], <span class="dt">R100</span> ;        </span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a><span class="an">/*05e0*/</span>   <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R188</span>, [<span class="dt">R2.64</span>+<span class="bn">0x100000</span>] ;</span>
+<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a><span class="an">/*05f0*/</span>   <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R204</span>, [<span class="dt">R2.64</span>+<span class="bn">0x10c000</span>] ;</span>
+<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a><span class="an">/*0600*/</span>   <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R172</span>, [<span class="dt">R2.64</span>+<span class="bn">0x110000</span>] ;</span>
+<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a><span class="an">/*0610*/</span>   <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R200</span>, [<span class="dt">R2.64</span>+<span class="bn">0x118000</span>] ;</span>
+<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a><span class="an">/*0620*/</span>   <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R196</span>, [<span class="dt">R2.64</span>+<span class="bn">0x11c000</span>] ;</span>
+<span id="cb5-36"><a href="#cb5-36" aria-hidden="true" tabindex="-1"></a><span class="an">/*0630*/</span>   <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R88</span>, [<span class="dt">R2.64</span>+<span class="bn">0x134000</span>] ; </span>
+<span id="cb5-37"><a href="#cb5-37" aria-hidden="true" tabindex="-1"></a><span class="an">/*0640*/</span>   <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R104</span>, [<span class="dt">R2.64</span>+<span class="bn">0x138000</span>] ;</span>
+<span id="cb5-38"><a href="#cb5-38" aria-hidden="true" tabindex="-1"></a><span class="an">/*0650*/</span>   <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R72</span>, [<span class="dt">R2.64</span>+<span class="bn">0x13c000</span>] ; </span>
+<span id="cb5-39"><a href="#cb5-39" aria-hidden="true" tabindex="-1"></a><span class="an">/*0660*/</span>   <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R168</span>, [<span class="dt">R2.64</span>+<span class="bn">0x140000</span>] ;</span>
+<span id="cb5-40"><a href="#cb5-40" aria-hidden="true" tabindex="-1"></a><span class="an">/*0670*/</span>   <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R96</span>, [<span class="dt">R2.64</span>+<span class="bn">0x144000</span>] ; </span>
+<span id="cb5-41"><a href="#cb5-41" aria-hidden="true" tabindex="-1"></a><span class="an">/*0680*/</span>   <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R180</span>, [<span class="dt">R2.64</span>+<span class="bn">0x148000</span>] ;</span>
+<span id="cb5-42"><a href="#cb5-42" aria-hidden="true" tabindex="-1"></a><span class="an">/*0690*/</span>   <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R44</span>, [<span class="dt">R2.64</span>+<span class="bn">0x150000</span>] ; </span>
+<span id="cb5-43"><a href="#cb5-43" aria-hidden="true" tabindex="-1"></a><span class="an">/*06a0*/</span>   <span class="kw">STG.E.128</span> [<span class="dt">R248.64</span>+<span class="bn">0x78000</span>], <span class="dt">R36</span> ;         </span>
+<span id="cb5-44"><a href="#cb5-44" aria-hidden="true" tabindex="-1"></a><span class="an">/*06b0*/</span>   <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R100</span>, [<span class="dt">R2.64</span>+<span class="bn">0x15c000</span>] ;</span>
+<span id="cb5-45"><a href="#cb5-45" aria-hidden="true" tabindex="-1"></a><span class="an">/*06c0*/</span>   <span class="kw">STG.E.128</span> [<span class="dt">R248.64</span>+<span class="bn">0x94000</span>], <span class="dt">R12</span> ;         </span>
+<span id="cb5-46"><a href="#cb5-46" aria-hidden="true" tabindex="-1"></a><span class="an">/*06d0*/</span>   <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R36</span>, [<span class="dt">R2.64</span>+<span class="bn">0x154000</span>] ; </span>
+<span id="cb5-47"><a href="#cb5-47" aria-hidden="true" tabindex="-1"></a><span class="an">/*06e0*/</span>   <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R12</span>, [<span class="dt">R2.64</span>+<span class="bn">0x174000</span>] ; </span>
+<span id="cb5-48"><a href="#cb5-48" aria-hidden="true" tabindex="-1"></a><span class="an">/*06f0*/</span>   <span class="kw">STG.E.128</span> [<span class="dt">R248.64</span>+<span class="bn">0x8c000</span>], <span class="dt">R16</span> ;         </span>
+<span id="cb5-49"><a href="#cb5-49" aria-hidden="true" tabindex="-1"></a><span class="an">/*0700*/</span>   <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R16</span>, [<span class="dt">R2.64</span>+<span class="bn">0x16c000</span>] ; </span>
+<span id="cb5-50"><a href="#cb5-50" aria-hidden="true" tabindex="-1"></a><span class="an">/*0710*/</span>   <span class="kw">STG.E.128</span> [<span class="dt">R248.64</span>+<span class="bn">0x7c000</span>], <span class="dt">R4</span> ;          </span>
+<span id="cb5-51"><a href="#cb5-51" aria-hidden="true" tabindex="-1"></a><span class="an">/*0720*/</span>   <span class="kw">STG.E.128</span> [<span class="dt">R248.64</span>+<span class="bn">0x9c000</span>], <span class="dt">R80</span> ;         </span>
+<span id="cb5-52"><a href="#cb5-52" aria-hidden="true" tabindex="-1"></a><span class="an">/*0730*/</span>   <span class="kw">STG.E.128</span> [<span class="dt">R248.64</span>+<span class="bn">0xa0000</span>], <span class="dt">R64</span> ;         </span>
+<span id="cb5-53"><a href="#cb5-53" aria-hidden="true" tabindex="-1"></a><span class="an">/*0740*/</span>   <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R4</span>, [<span class="dt">R2.64</span>+<span class="bn">0x158000</span>] ;  </span>
+<span id="cb5-54"><a href="#cb5-54" aria-hidden="true" tabindex="-1"></a><span class="an">/*0750*/</span>   <span class="kw">LDG.E.128.CONSTANT</span> <span class="dt">R80</span>, [<span class="dt">R2.64</span>+<span class="bn">0x180000</span>] ; </span>
+<span id="cb5-55"><a href="#cb5-55" aria-hidden="true" tabindex="-1"></a><span class="an">/*0760*/</span>   <span class="kw">STG.E.128</span> [<span class="dt">R248.64</span>+<span class="bn">0xa4000</span>], <span class="dt">R84</span> ;         </span>
+<span id="cb5-56"><a href="#cb5-56" aria-hidden="true" tabindex="-1"></a><span class="an">/*0770*/</span>   <span class="kw">STG.E.128</span> [<span class="dt">R248.64</span>+<span class="bn">0x30000</span>], <span class="dt">R232</span> ;        </span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Nice, but it still requires X SMs to saturate the HBM…</p>
+</section>
+<section id="explanation" class="level4" data-number="3.2.2">
+<h4 data-number="3.2.2" class="anchored" data-anchor-id="explanation"><span class="header-section-number">3.2.2</span> Explanation</h4>
+<p>There’s two issues that we see in the SASS:<br>
+(1) It is only storing a few elements at a time before issuing more loads. This yields poor performance because the memory buses can only transfer reads or writes, not both, as I briefly mentioned in the limitations at the bottom of the <a href="#k0_expectation">Expectation</a> section<br>
+(2) This issue isn’t visible in the SASS snippets that I provided, but we are also running into an issue that our memory instructions can no longer fit the address offset into the instructions’ immediate value.<br>
+You can see it for yourself <a href="TODO:%20add%20the%20line%20number%20of%20where%20it%20starts">here</a>. See how we go from loads and stores to these <code>IMAD</code> and <code>IADD</code> instructions.</p>
+<p>I’m going to ignore (1) for now because it is very painful to try and edit the SASS which is emitted, so let’s continue and hope that it doesn’t appear when we apply other optimizations.<br>
+When you do these kinds of optimizations one-by-one, it’s a great way to learn the effectiveness of various optimizations, but some weird “issues” like this don’t appear after applying other optimizations. Which is nice, of course, but really makes you kick yourself for all of that wasted investigating<a href="#fn4" class="footnote-ref" id="fnref4" role="doc-noteref"><sup>4</sup></a>…</p>
+<p>We can address (2) in the next kernel.</p>
+</section>
+<section id="quick-failed-optimization" class="level4" data-number="3.2.3">
+<h4 data-number="3.2.3" class="anchored" data-anchor-id="quick-failed-optimization"><span class="header-section-number">3.2.3</span> Quick failed optimization</h4>
+<p>I was trying to think of ways to reduce register pressure on the PTX side-of-things, and I realized that we could allocate one large blob of global memory, and then assign <code>dA</code> to the first half, and <code>dB</code> to the second half.</p>
+<p>From the PTX perspective, this looks nice! We saved ourself two registers (since GMEM addresses are 64 bits)!</p>
+<p>However, this was before I had realized that issue (2) was happening.<br>
+With (2), it’s immediately<a href="#fn5" class="footnote-ref" id="fnref5" role="doc-noteref"><sup>5</sup></a> clear why this failed: we still have to use a separate register for the address of <code>dB</code> since <span class="math inline">\(dB &gt; dA + \text{MAX\_IMMEDIATE\_VALUE}\)</span>.</p>
+<p>I want to also add that this failed extremely hard because there is <em>no possible method</em> that I was able to find of getting <code>ptxas</code> to accept that <code>&amp;dB[0] &gt;= &amp;dA[NUMEL]</code>. Even with <code>__builtin_assume()</code> compiler hints. It deemed my creation of <code>dB</code> from <code>dA</code> as possibly overlapping, and thus, all of the reads and writes were serialized.</p>
+<p>This meant that it looked like</p>
+<pre><code>load r0, a[0], 
+store b[0], r0 
+load r0, a[1], 
+store b[1], r0</code></pre>
+<p>Which is horrible!!</p>
+<p>But even with a perfect <code>ptxas</code>, as I mentioned above, this optimization achieves nothing<a href="#fn6" class="footnote-ref" id="fnref6" role="doc-noteref"><sup>6</sup></a>.</p>
+</section>
+</section>
+<section id="kernel-k1_0-ptr-increment" class="level3" data-number="3.3">
+<h3 data-number="3.3" class="anchored" data-anchor-id="kernel-k1_0-ptr-increment"><span class="header-section-number">3.3</span> Kernel k1_0 — ptr increment</h3>
+<p>So, to counteract the fact that our pointer-offsets are becoming extremely large, we can implement an age-old compiler trick: we just increment the pointer rather than having a loop variable which determines the offset.<br>
+This is historically useful for saving a register (and instruction), but it is quite nice here to avoid the mess of address calculation.</p>
+<p>And why can’t <code>nvcc</code> just handle this itself? Well, I think that a large part is due to the fact that we’re just fully unrolling the loop before we perform optimization passes, so it’s probably harder for <code>nvcc</code> to spot this? Ultimately, we don’t know.<br>
+(NVIDIA plz open source ,–__–)</p>
+<p>So our kernel looks like:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb7"><pre class="sourceCode c++ code-with-copy"><code class="sourceCode cpp"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>__global__ <span class="dt">void</span> </span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>__launch_bounds__<span class="op">(</span>THREADS_PER_BLOCK<span class="op">,</span> BLOCKS_PER_SM<span class="op">)</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>small_SMs<span class="op">(</span><span class="at">const</span> float4<span class="op">*</span> <span class="ex">__restrict__</span> dA<span class="op">,</span> float4<span class="op">*</span> <span class="ex">__restrict__</span> dB<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> <span class="dt">int</span> step <span class="op">=</span> BLOCKS_PER_SM <span class="op">*</span> SMALL_SMs_USED <span class="op">*</span> THREADS_PER_BLOCK<span class="op">;</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> <span class="dt">int</span> idx <span class="op">=</span> blockIdx<span class="op">.</span>x <span class="op">*</span> THREADS_PER_BLOCK <span class="op">+</span> threadIdx<span class="op">.</span>x<span class="op">;</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    <span class="pp">#pragma unroll</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> SMALL_NUM_STEPS<span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>        dB<span class="op">[</span>idx<span class="op">]</span> <span class="op">=</span> dA<span class="op">[</span>idx<span class="op">];</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>        dA <span class="op">+=</span> step<span class="op">;</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>        dB <span class="op">+=</span> step<span class="op">;</span></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<section id="result-2" class="level4" data-number="3.3.1">
+<h4 data-number="3.3.1" class="anchored" data-anchor-id="result-2"><span class="header-section-number">3.3.1</span> Result</h4>
+<p>Anddddd this generates the same result, namely, requiring X SMs to saturate…</p>
+</section>
+<section id="explanation-1" class="level4" data-number="3.3.2">
+<h4 data-number="3.3.2" class="anchored" data-anchor-id="explanation-1"><span class="header-section-number">3.3.2</span> Explanation</h4>
+<p>It makes a lot of sense why this didn’t improve performance when we <a href="TODO!">look at the SASS</a>.<br>
+But why is the SASS the same? Why does this happen?<br>
+Well, it helps if we remember an age-old, cursed behavior of C array syntax.</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb8"><pre class="sourceCode c code-with-copy"><code class="sourceCode c"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="dt">int</span><span class="op">*</span> a <span class="op">=</span> malloc<span class="op">(</span><span class="dv">4</span> <span class="op">*</span> <span class="kw">sizeof</span><span class="op">(</span><span class="dt">int</span><span class="op">));</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> <span class="dv">4</span><span class="op">;</span> <span class="op">++</span>i<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    a<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> <span class="dv">3</span> <span class="op">*</span> i<span class="op">;</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>printf<span class="op">(</span><span class="st">"a[2]: </span><span class="sc">%i</span><span class="st">,</span><span class="sc">\n</span><span class="st">2[a]: </span><span class="sc">%i</span><span class="st">"</span><span class="op">,</span> a<span class="op">[</span><span class="dv">2</span><span class="op">],</span> <span class="dv">2</span><span class="op">[</span>a<span class="op">]);</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Running this prints: <code>a[2]: 6, 2[a]: 6</code>.</p>
+<p>And we can see that using an increasing constant for the base is really just the same as using an increasing constant for the offset.</p>
+<p><em>Note:</em> &nbsp;Since this is part of my learning, when I get quite stumped on bugs that I find likely not fruitful/novel, I consult LLMs.<br>
+However, I was quite proud to remember this behavior and spot that this was happening. It’s just a really random but neat observation.</p>
+</section>
+</section>
+<section id="kernel-k1_1-grouped_inner_loop" class="level3" data-number="3.4">
+<h3 data-number="3.4" class="anchored" data-anchor-id="kernel-k1_1-grouped_inner_loop"><span class="header-section-number">3.4</span> Kernel k1_1 — grouped_inner_loop</h3>
+<p>So what we want is for the pointers to be incremented right before the offset becomes larger than the largest possible immediate operand.</p>
+<p>We can achieve this with the following kernel:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb9"><pre class="sourceCode c++ code-with-copy"><code class="sourceCode cpp"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">constexpr</span> <span class="dt">int</span> GROUP_SIZE <span class="op">=</span> <span class="dv">512</span><span class="op">;</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>__global__ <span class="dt">void</span> </span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>__launch_bounds__<span class="op">(</span>THREADS_PER_BLOCK<span class="op">,</span> BLOCKS_PER_SM<span class="op">)</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>small_SMs<span class="op">(</span><span class="at">const</span> float4<span class="op">*</span> <span class="ex">__restrict__</span> dA<span class="op">,</span> float4<span class="op">*</span> <span class="ex">__restrict__</span> dB<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> <span class="dt">int</span> step <span class="op">=</span> BLOCKS_PER_SM <span class="op">*</span> SMALL_SMs_USED <span class="op">*</span> THREADS_PER_BLOCK<span class="op">;</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> <span class="dt">int</span> idx <span class="op">=</span> blockIdx<span class="op">.</span>x <span class="op">*</span> THREADS_PER_BLOCK <span class="op">+</span> threadIdx<span class="op">.</span>x<span class="op">;</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> SMALL_NUM_STEPS<span class="op">;</span> i <span class="op">+=</span> GROUP_SIZE<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>        <span class="pp">#pragma unroll</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> j <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> j <span class="op">&lt;</span> GROUP_SIZE<span class="op">;</span> <span class="op">++</span>j<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>            dB<span class="op">[</span>j <span class="op">*</span> step <span class="op">+</span> idx<span class="op">]</span> <span class="op">=</span> dA<span class="op">[</span>j <span class="op">*</span> step <span class="op">+</span> idx<span class="op">];</span></span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a>        dA <span class="op">+=</span> step <span class="op">*</span> GROUP_SIZE<span class="op">;</span></span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a>        dB <span class="op">+=</span> step <span class="op">*</span> GROUP_SIZE<span class="op">;</span></span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>I picked <code>GROUP_SIZE</code> based on the fact that: by observation, SASS memory operations can support immediates of <code>-0x800000</code> to <code>0x7fc000</code>,<br>
+so then we want to increment our pointer address by <code>0x1000000</code> = <span class="math inline">\(2^{23}\)</span>, so then group size should be:<br>
+<span class="math inline">\(\frac{2^{23}}{\texttt{step} \cdot 16} = \frac{2^{23}}{4 \cdot 256 \cdot 16} = 2^{23 - (2+8+4)} = 2^{23 - 14} = 2^9 = 512\)</span></p>
+<p><em>Note:</em> &nbsp;Even if we didn’t increment the pointers, and instead used the offset <code>(i + j) * step + idx</code>, the compiler will still increment the pointers for us so that we don’t have to use a constant. It generates slightly different code, you can <a href="TODO">see here</a>.</p>
+<p>But this kernel has the following problem:<br>
+<a href="TODO">The SASS</a> now looks like 32 loads, then 32 stores, and then it loops back. But as I mentioned above, while it’s nice to burst our loads/stores because of the data bus, we would ideally like to always have outstanding loads.<br>
+The reason is that stores are “instant” in terms of they instantly create an available register<a href="#fn7" class="footnote-ref" id="fnref7" role="doc-noteref"><sup>7</sup></a>.</p>
+<section id="limitations" class="level4" data-number="3.4.1">
+<h4 data-number="3.4.1" class="anchored" data-anchor-id="limitations"><span class="header-section-number">3.4.1</span> Limitations</h4>
+<p>We would like loads/stores that looks like our <a href="#lst-sched" class="quarto-xref">Listing&nbsp;1</a>.<br>
+We should just have a prologue that loads everything, a main loop that issues a burst of stores followed by a burst of loads, and then an epilogue of stores.</p>
+<p>But you can’t really control how <code>ptxas</code> does everything. And while it’d be nice to fully trust <code>ptxas</code>’s decisions, <a href="https://dl.acm.org/doi/10.1145/3332466.3374520">they’re not always optimal</a></p>
+</section>
+</section>
+<section id="a-pitstop" class="level3" data-number="3.5">
+<h3 data-number="3.5" class="anchored" data-anchor-id="a-pitstop"><span class="header-section-number">3.5</span> A pitstop</h3>
+<p>Well, let’s carry-on then, ignoring (1) still.<br>
+There are two straightforward optimizations that we can apply from here:</p>
+<ol type="1">
+<li>Ensuring that we’re not caching our loads/stores (since we won’t reuse them)</li>
+<li>Using shared memory or prefetching to decrease the latency of other data (since they don’t occupy instructions)</li>
+</ol>
+<p>Let’s go!</p>
+</section>
+<section id="kernel-k2-cache_policy" class="level3" data-number="3.6">
+<h3 data-number="3.6" class="anchored" data-anchor-id="kernel-k2-cache_policy"><span class="header-section-number">3.6</span> Kernel k2 — cache_policy</h3>
+<p>This is the beginning of our inline-assembly journey for these kernels! But that means that the kernel will become less readable…</p>
+<p>We need to first see what cache-behavior specifications load and store instructions support. See <a href="https://docs.nvidia.com/cuda/archive/11.0_GA/parallel-thread-execution/index.html#cache-operators">here</a>, but the T;LDR is that we want to pick <code>cg</code> because this means that it skips the L1, and only goes to L2 (passing through L2 is required).</p>
+<p>We define the following two inline functions:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb10"><pre class="sourceCode c++ code-with-copy"><code class="sourceCode cpp"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>__device__ __forceinline__</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>float4 load<span class="op">(</span><span class="at">const</span> float4<span class="op">*</span> p<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>    float4 v<span class="op">;</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">asm</span> <span class="at">volatile</span><span class="op">(</span><span class="st">"ld.global.cg.nc.v4.f32 {%0, %1, %2, %3}, [%4];"</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>        <span class="op">:</span> <span class="st">"=f"</span><span class="op">(</span>v<span class="op">.</span>x<span class="op">),</span> <span class="st">"=f"</span><span class="op">(</span>v<span class="op">.</span>y<span class="op">),</span> <span class="st">"=f"</span><span class="op">(</span>v<span class="op">.</span>z<span class="op">),</span> <span class="st">"=f"</span><span class="op">(</span>v<span class="op">.</span>w<span class="op">)</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>        <span class="op">:</span> <span class="st">"l"</span><span class="op">(</span>p<span class="op">));</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> v<span class="op">;</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>__device__ __forceinline__</span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a><span class="dt">void</span> store<span class="op">(</span>float4<span class="op">*</span> p<span class="op">,</span> float4 v<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>    <span class="kw">asm</span> <span class="at">volatile</span><span class="op">(</span><span class="st">"st.global.cg.v4.f32 [%0], {%1, %2, %3, %4};"</span></span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>        <span class="op">::</span> <span class="st">"l"</span><span class="op">(</span>p<span class="op">),</span> <span class="st">"f"</span><span class="op">(</span>v<span class="op">.</span>x<span class="op">),</span> <span class="st">"f"</span><span class="op">(</span>v<span class="op">.</span>y<span class="op">),</span> <span class="st">"f"</span><span class="op">(</span>v<span class="op">.</span>z<span class="op">),</span> <span class="st">"f"</span><span class="op">(</span>v<span class="op">.</span>w<span class="op">)</span></span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>        <span class="op">:</span> <span class="st">"memory"</span><span class="op">);</span></span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>And then change our kernel to look like:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb11"><pre class="sourceCode c++ code-with-copy"><code class="sourceCode cpp"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>__global__ <span class="dt">void</span> </span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>__launch_bounds__<span class="op">(</span>THREADS_PER_BLOCK<span class="op">,</span> BLOCKS_PER_SM<span class="op">)</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>small_SMs<span class="op">(</span><span class="at">const</span> float4<span class="op">*</span> <span class="ex">__restrict__</span> dA<span class="op">,</span> float4<span class="op">*</span> <span class="ex">__restrict__</span> dB<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> <span class="dt">int</span> step <span class="op">=</span> BLOCKS_PER_SM <span class="op">*</span> SMALL_SMs_USED <span class="op">*</span> THREADS_PER_BLOCK<span class="op">;</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">const</span> <span class="dt">int</span> idx <span class="op">=</span> blockIdx<span class="op">.</span>x <span class="op">*</span> THREADS_PER_BLOCK <span class="op">+</span> threadIdx<span class="op">.</span>x<span class="op">;</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> i <span class="op">&lt;</span> SMALL_NUM_STEPS<span class="op">;</span> i <span class="op">+=</span> GROUP_SIZE<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>        <span class="pp">#pragma unroll</span></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> j <span class="op">=</span> <span class="dv">0</span><span class="op">;</span> j <span class="op">&lt;</span> GROUP_SIZE<span class="op">;</span> <span class="op">++</span>j<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a>            store<span class="op">(&amp;</span>dB<span class="op">[(</span>i <span class="op">+</span> j<span class="op">)</span> <span class="op">*</span> step <span class="op">+</span> idx<span class="op">],</span> load<span class="op">(&amp;</span>dA<span class="op">[(</span>i <span class="op">+</span> j<span class="op">)</span> <span class="op">*</span> step <span class="op">+</span> idx<span class="op">]));</span></span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a>        <span class="op">}</span></span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a>        dA <span class="op">+=</span> GROUP_SIZE <span class="op">*</span> step<span class="op">;</span></span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>        dB <span class="op">+=</span> GROUP_SIZE <span class="op">*</span> step<span class="op">;</span></span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb11-15"><a href="#cb11-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-16"><a href="#cb11-16" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>If you inspected the code, you may notice the <code>.nc</code> in our <code>ld.global</code> instruction.<br>
+The <code>ld.global.nc</code> instructions utilize the non-coherent cache. It’s <a href="https://docs.nvidia.com/cuda/archive/11.0_GA/parallel-thread-execution/index.html#data-movement-and-conversion-instructions-ld-global-nc">not the most well-documented thing</a>, but <code>ptxas</code> emits it on our loads because we specified <code>const __restrict__</code>, so we’ll follow suit.<br>
+(And testing reveals that it TODO than omitting it.)</p>
+<p>But <a href="TODO">looking at the SASS</a>, we see that</p>
+<p>Onwards!</p>
+</section>
+<section id="kernel-k3-shared_memory" class="level3" data-number="3.7">
+<h3 data-number="3.7" class="anchored" data-anchor-id="kernel-k3-shared_memory"><span class="header-section-number">3.7</span> Kernel k3 — shared_memory</h3>
+<p>We’re now ready to get to the <em>hopefully</em> most obvious optimization that awaits us on Ampere, utilizing shared memory via <code>cp.async</code> instructions! They’re outlined <a href="https://docs.nvidia.com/cuda/archive/11.0_GA/parallel-thread-execution/index.html#data-movement-and-conversion-instructions-asynchronous-copy">here</a>, but the TL;DR is that the instruction can directly tranport data from global memory to shared memory without intermediately using a register!</p>
+<p>This means that we can issue as many loads from global memory to shared memory, with the amount of available shared memory being the only limiting factor.</p>
+<p>We just have to synchronize before reading to ensure that it finished transporting the data.</p>
+<section id="optimizing-in-flight-requests" class="level4" data-number="3.7.1">
+<h4 data-number="3.7.1" class="anchored" data-anchor-id="optimizing-in-flight-requests"><span class="header-section-number">3.7.1</span> Optimizing in-flight requests</h4>
+<p>Let’s first see how much shared memory each thread can have.<br>
+So the max per-block shared memory that we can allocate is 163KB on an A100.<br>
+Splitting this up amongst 256 threads, we get <span class="math inline">\(163 \cdot 4\)</span> bytes per thread. Then, a single <code>float4</code> occupies 16B, so each thread can load <span class="math inline">\(\frac{163 \cdot 4}{16} &gt; 40\)</span> elements (unfortunately, 3KB will just sit unutilized, but it would get messy to use it).</p>
+<p>These <code>cp.async</code> don’t occupy/hold any of our registers, so this means that we still have all of our registers for loading/storing! It literally only costs us one register, the shared memory pointer.<br>
+So we literally get 60% more data for free (we hope)!</p>
+<p>We can try to interleave shared memory loads with global loads:</p>
+<pre><code>load shared[0..39], a[0..39]
+load four-reg[0..20], a[40..60]
+load four-reg[21..60], shared[0..39]
+store b[0..39], four-reg[21..60]
+load shared[0..39], a[60+0, 60+39]
+store b[40..60], four-reg[0..20]
+load four-reg[0..20], a[100..120]
+load four-reg[21..60], shared[0..39]
+...</code></pre>
+</section>
+</section>
+<section id="kernel-kx-prefetch" class="level3" data-number="3.8">
+<h3 data-number="3.8" class="anchored" data-anchor-id="kernel-kx-prefetch"><span class="header-section-number">3.8</span> Kernel kx — prefetch</h3>
+<p>Upon reading the <a href="https://docs.nvidia.com/cuda/archive/11.0_GA/parallel-thread-execution/index.html#data-movement-and-conversion-instructions">PTX 11.0 documentation</a> (main CUDA Toolkit release for <code>sm_80</code>, which is what we need for A100), I discovered that the GPU supports prefetching (I wasn’t aware of this before).</p>
+</section>
+</section>
+<section id="lessons" class="level2" data-number="4">
+<h2 data-number="4" class="anchored" data-anchor-id="lessons"><span class="header-section-number">4</span> Lessons</h2>
+<section id="look-at-the-sass" class="level3" data-number="4.1">
+<h3 data-number="4.1" class="anchored" data-anchor-id="look-at-the-sass"><span class="header-section-number">4.1</span> Look at the SASS!!!</h3>
+<p>This is probably the biggest lesson. Even just taking our first kernel, <a href="TODO">looking at its PTX</a>, we may really doubt its performance. All of the loads and stores are streamlined. This may lead us on an adventure where we have a prologue, main loop, and then epilogue, and ensure that we access a constant-sized array with constand indices to ensure that it stays as registers…</p>
+<p>But we don’t need to do this upon inspecting the SASS. We see that <code>ptxas</code> handles instruction scheduling (sometimes against our wishes, as we saw in <a href="(#k0_explanation)">Explanation for k0</a>).</p>
+<p>On the other hand, we won’t be able to detect that the constant doesn’t fit into the immediate operand for memory instructions by looking at the PTX either. This is the kind of subtle thing that is very easy to miss when working at the PTX-level only. (This is generally not very relevant because it’s quite rare to have huge constant offsets, but the point stands.)</p>
+</section>
+</section>
+<section id="methodology" class="level2" data-number="5">
+<h2 data-number="5" class="anchored" data-anchor-id="methodology"><span class="header-section-number">5</span> Methodology</h2>
+<p>We can test how well the kernel performs with three means really:</p>
+<ol type="1">
+<li>We don’t see a speedup by adding more SMs than our minimal amount (e.g., increasing number of SMs launched from 4 <span class="math inline">\(\to\)</span> 16 gives no speedup)</li>
+<li>We can see how close we can get to 90% SOL for memory transfer</li>
+<li>We can compare against a standard memory transfer kernel that utilizes most of the SMs</li>
+</ol>
+<p>All three are equivalent for our purposes, so let’s just use the third one since it is nicely portable.</p>
+</section>
+
+
+<div id="quarto-appendix" class="default"><section id="footnotes" class="footnotes footnotes-end-of-document" role="doc-endnotes"><h2 class="anchored quarto-appendix-heading">Footnotes</h2>
+
+<ol>
+<li id="fn1"><p>CISC has more hope in a post-LLM world, but I would argue that historically, CISC ISAs are very difficult to fully utilize. For the compiler, it’s incredibly difficult to lower a program to the optimal CISC instructions, as it’s hard to preserve/recognize groups of instructions such that they retain the higher-level semantics that niche CISC instructions require. And as an assembly programmer, I also feel that it requires so much knowledge and devotion to one generation/extension of an ISA. <em>“Here, just read <a href="https://cdrdv2.intel.com/v1/dl/getContent/671200?_gl=1*nyn5ko*_ga*MTM0NDY5Mjg4My4xNzkzMTE2MDM5*_ga_HVBGF9XT5H*czE3OTMxMTYwMzgkbzEkZzEkdDE3OTMxMTYwNTEkajQ3JGwwJGgw">our 2,500-page volume</a> on the instructions that we support!”</em><br>
+This isn’t even touching on the chip area (and thus power consumption) that’s required to have this many specialized units.<br>
+As you can tell, I’m extremely pleased that RISC ISAs have taken the lead.<a href="#fnref1" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+<li id="fn2"><p>Global memory bank/channel conflicts are very confusing, and it is nearly impossible to understand because the hardware implements some kind of hashing to global memory addresses. The hashing is implemented quite well though, so we don’t really have to concern ourselves with this. (For both points, see <a href="https://forums.developer.nvidia.com/t/partition-camping-on-newer-architectures-long-scoreboard/72689">here</a>.) But we are still recommended to generally access global memory in order (even though this hashing also handles cases of using large strides).<br>
+For example, I was able to find that on a 3070, we only observe a slowdown when our memory addresses are equal <span class="math inline">\(\mod 2^{15}\)</span> (10% slowdown). I did not observe any slowdown with smaller gaps.<a href="#fnref2" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+<li id="fn3"><p>This means that it becomes very difficult to invoke without very special compiler knowledge, because the the name of our <code>small_SMs</code> function becomes <code>_Z9small_SMsPK6float4PS_</code> in the binary, for instance.<a href="#fnref3" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+<li id="fn4"><p>I mean it’s still an issue that they appear at all, of course. But if they’re irrelevant for the <em>most performant</em> cases, then they’re not really big issues. I want to write a post about my experience of this happening with the Triton compiler sometime soon (and a Triton optimization guide, because I personally feel that the “<a href="https://triton-lang.org/main/getting-started/tutorials/index.html">Tutorials</a>” are just advanced use-cases of Triton).<a href="#fnref4" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+<li id="fn5"><p>pun <em>intended</em><a href="#fnref5" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+<li id="fn6"><p><em>Really though, nothing?</em><br>
+Well, it would save the device from passing an extra argument. And I was going to try to argue that since the kernel arguments are stored in constant memory, which is broadcast, that we would save an extra read, but we can actually bundle them into one read because each is 64bits, and we can read up to 128B simultaneously (on GMEM, I’m not actually exactly sure about the internals of constant memory vs global memory). But even then, we have to do another addition instruction (assuming the gap fits into an immediate). And alas, this requires compile-time length of <code>dA</code>…<br>
+So, from my (fallible) understanding of GPU architecture, I think that even in the idealized case, it achieves nothing.<a href="#fnref6" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+<li id="fn7"><p>I do have to learn more of the hardware internals though about what happens when store queues become backed-up and be able to reason about what’s going on in the hardware.<a href="#fnref7" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+</ol>
+</section></div></main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

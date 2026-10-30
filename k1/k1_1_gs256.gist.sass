@@ -1,0 +1,148 @@
+
+Fatbin elf code:
+================
+arch = sm_80
+code version = [1,7]
+host = linux
+compile_size = 64bit
+
+	code for sm_80
+
+Fatbin elf code:
+================
+arch = sm_80
+code version = [1,7]
+host = linux
+compile_size = 64bit
+
+	code for sm_80
+		Function : small_SMs
+	.headerflags	@"EF_CUDA_64BIT_ADDRESS EF_CUDA_SM80 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM80)"
+        /*0000*/                   IMAD.MOV.U32 R1, RZ, RZ, c[0x0][0x28] ;
+        /*0010*/                   S2R R0, SR_CTAID.X ;
+        /*0020*/                   IMAD.MOV.U32 R3, RZ, RZ, RZ ;
+        /*0030*/                   ULDC.64 UR4, c[0x0][0x118] ;
+        /*0040*/                   S2R R5, SR_TID.X ;
+        /*0050*/                   ULDC.64 UR8, c[0x0][0x168] ;
+        /*0060*/                   ULDC.64 UR6, c[0x0][0x160] ;
+        /*0070*/                   LEA R0, R0, R5, 0x8 ;
+        /*0080*/                   MOV R251, UR7 ;
+        /*0090*/                   IMAD.U32 R250, RZ, RZ, UR6 ;
+        /*00a0*/                   IMAD R5, R3, 0x400, R0 ;
+        /*00b0*/                   IMAD.WIDE R250, R5, 0x10, R250 ;
+        /*00c0*/                   LDG.E.128.CONSTANT R8, [R250.64] ;
+                                   ... another 13 LDG.E.128.CONSTANT ...
+        /*01a0*/                   LDG.E.128.CONSTANT R64, [R250.64+0x38000] ;
+        /*01b0*/                   MOV R248, UR8 ;
+        /*01c0*/                   MOV R249, UR9 ;
+        /*01d0*/                   LDG.E.128.CONSTANT R68, [R250.64+0x7c000] ;
+        /*01e0*/                   IMAD.WIDE R248, R5, 0x10, R248 ;
+        /*01f0*/                   LDG.E.128.CONSTANT R72, [R250.64+0x80000] ;
+                                   ... another 43 LDG.E.128.CONSTANT ...
+        /*04b0*/                   LDG.E.128.CONSTANT R244, [R250.64+0x3fc000] ;
+        /*04c0*/                   STG.E.128 [R248.64], R8 ;
+                                   ... another 3 STG.E.128 ...
+        /*0500*/                   STG.E.128 [R248.64+0x10000], R24 ;
+        /*0510*/                   LDG.E.128.CONSTANT R8, [R250.64+0x40000] ;
+                                   ... another 2 LDG.E.128.CONSTANT ...
+        /*0540*/                   LDG.E.128.CONSTANT R20, [R250.64+0x4c000] ;
+        /*0550*/                   STG.E.128 [R248.64+0x14000], R28 ;
+                                   ... another 8 STG.E.128 ...
+        /*05e0*/                   STG.E.128 [R248.64+0x38000], R64 ;
+        /*05f0*/                   LDG.E.128.CONSTANT R24, [R250.64+0x50000] ;
+                                   ... another 9 LDG.E.128.CONSTANT ...
+        /*0690*/                   LDG.E.128.CONSTANT R64, [R250.64+0x78000] ;
+        /*06a0*/                   STG.E.128 [R248.64+0x3c000], R4 ;
+                                   ... another 3 STG.E.128 ...
+        /*06e0*/                   STG.E.128 [R248.64+0x88000], R80 ;
+        /*06f0*/                   LDG.E.128.CONSTANT R4, [R250.64+0x12c000] ;
+        /*0700*/                   STG.E.128 [R248.64+0x8c000], R84 ;
+                                   ... another 38 STG.E.128 ...
+        /*0970*/                   STG.E.128 [R248.64+0x128000], R240 ;
+        /*0980*/                   LDG.E.128.CONSTANT R68, [R250.64+0x16c000] ;
+                                   ... another 2 LDG.E.128.CONSTANT ...
+        /*09b0*/                   LDG.E.128.CONSTANT R80, [R250.64+0x178000] ;
+        /*09c0*/                   STG.E.128 [R248.64+0x40000], R8 ;
+                                   ... another 2 STG.E.128 ...
+        /*09f0*/                   STG.E.128 [R248.64+0x4c000], R20 ;
+        /*0a00*/                   LDG.E.128.CONSTANT R84, [R250.64+0x17c000] ;
+                                   ... another 8 LDG.E.128.CONSTANT ...
+        /*0a90*/                   LDG.E.128.CONSTANT R104, [R250.64+0x190000] ;
+        /*0aa0*/                   STG.E.128 [R248.64+0x50000], R24 ;
+                                   ... another 9 STG.E.128 ...
+        /*0b40*/                   STG.E.128 [R248.64+0x78000], R64 ;
+        /*0b50*/                   LDG.E.128.CONSTANT R24, [R250.64+0x140000] ;
+                                   ... another 43 LDG.E.128.CONSTANT ...
+        /*0e10*/                   LDG.E.128.CONSTANT R240, [R250.64+0x218000] ;
+        /*0e20*/                   STG.E.128 [R248.64+0x12c000], R4 ;
+                                   ... another 3 STG.E.128 ...
+        /*0e60*/                   STG.E.128 [R248.64+0x178000], R80 ;
+        /*0e70*/                   LDG.E.128.CONSTANT R4, [R250.64+0x21c000] ;
+                                   ... another 2 LDG.E.128.CONSTANT ...
+        /*0ea0*/                   LDG.E.128.CONSTANT R76, [R250.64+0x264000] ;
+        /*0eb0*/                   STG.E.128 [R248.64+0x17c000], R84 ;
+                                   ... another 4 STG.E.128 ...
+        /*0f00*/                   STG.E.128 [R248.64+0x180000], R88 ;
+        /*0f10*/                   LDG.E.128.CONSTANT R8, [R250.64+0x220000] ;
+                                   ... another 2 LDG.E.128.CONSTANT ...
+        /*0f40*/                   LDG.E.128.CONSTANT R20, [R250.64+0x22c000] ;
+        /*0f50*/                   STG.E.128 [R248.64+0x184000], R92 ;
+                                   ... another 2 STG.E.128 ...
+        /*0f80*/                   STG.E.128 [R248.64+0x190000], R104 ;
+        /*0f90*/                   LDG.E.128.CONSTANT R80, [R250.64+0x268000] ;
+                                   ... another 5 LDG.E.128.CONSTANT ...
+        /*0ff0*/                   LDG.E.128.CONSTANT R104, [R250.64+0x280000] ;
+        /*1000*/                   STG.E.128 [R248.64+0x140000], R24 ;
+                                   ... another 43 STG.E.128 ...
+        /*12c0*/                   STG.E.128 [R248.64+0x218000], R240 ;
+        /*12d0*/                   LDG.E.128.CONSTANT R24, [R250.64+0x230000] ;
+                                   ... another 43 LDG.E.128.CONSTANT ...
+        /*1590*/                   LDG.E.128.CONSTANT R240, [R250.64+0x308000] ;
+        /*15a0*/                   STG.E.128 [R248.64+0x21c000], R4 ;
+                                   ... another 3 STG.E.128 ...
+        /*15e0*/                   STG.E.128 [R248.64+0x22c000], R20 ;
+        /*15f0*/                   LDG.E.128.CONSTANT R4, [R250.64+0x30c000] ;
+                                   ... another 3 LDG.E.128.CONSTANT ...
+        /*1630*/                   LDG.E.128.CONSTANT R20, [R250.64+0x31c000] ;
+        /*1640*/                   STG.E.128 [R248.64+0x25c000], R68 ;
+                                   ... another 8 STG.E.128 ...
+        /*16d0*/                   STG.E.128 [R248.64+0x280000], R104 ;
+        /*16e0*/                   LDG.E.128.CONSTANT R68, [R250.64+0x34c000] ;
+                                   ... another 8 LDG.E.128.CONSTANT ...
+        /*1770*/                   LDG.E.128.CONSTANT R104, [R250.64+0x370000] ;
+        /*1780*/                   STG.E.128 [R248.64+0x230000], R24 ;
+                                   ... another 43 STG.E.128 ...
+        /*1a40*/                   STG.E.128 [R248.64+0x308000], R240 ;
+        /*1a50*/                   LDG.E.128.CONSTANT R24, [R250.64+0x320000] ;
+                                   ... another 43 LDG.E.128.CONSTANT ...
+        /*1d10*/                   LDG.E.128.CONSTANT R240, [R250.64+0x3f8000] ;
+        /*1d20*/                   IADD3 R3, R3, 0x100, RZ ;
+        /*1d30*/                   ISETP.GE.U32.AND P0, PT, R3, 0x400, PT ;
+        /*1d40*/                   UIADD3 UR8, UP1, UR8, 0x400000, URZ ;
+        /*1d50*/                   UIADD3 UR6, UP0, UR6, 0x400000, URZ ;
+        /*1d60*/                   STG.E.128 [R248.64+0x30c000], R4 ;
+        /*1d70*/                   UIADD3.X UR9, URZ, UR9, URZ, UP1, !UPT ;
+        /*1d80*/                   STG.E.128 [R248.64+0x310000], R8 ;
+        /*1d90*/                   UIADD3.X UR7, URZ, UR7, URZ, UP0, !UPT ;
+        /*1da0*/                   STG.E.128 [R248.64+0x314000], R12 ;
+                                   ... another 57 STG.E.128 ...
+        /*2140*/                   STG.E.128 [R248.64+0x3fc000], R244 ;
+        /*2150*/               @P0 CALL.REL.NOINC 0x2170 ;
+        /*2160*/                   BRA 0x80 ;
+        /*2170*/                   EXIT ;
+        /*2180*/                   BRA 0x2180;
+        /*2190*/                   NOP;
+                                   ... another 13 NOP ...
+        /*2270*/                   NOP;
+		..........
+
+
+
+Fatbin ptx code:
+================
+arch = sm_80
+code version = [8,4]
+host = linux
+compile_size = 64bit
+compressed
+ptxasOptions =
