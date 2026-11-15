@@ -1,0 +1,12 @@
+{
+  "arch": "sm_80",
+  "opt": 3,
+  "sms": 4,
+  "peak_sms": 32,
+  "numel": "1 << 24",
+  "threads": 256,
+  "sweep_sms": "1:32",
+  "within_percent": 3.0,
+  "warmup": 5,
+  "iterations": 100
+}

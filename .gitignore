@@ -1,5 +1,12 @@
-/.quarto/
+**/.quarto/
 **/*.quarto_ipynb
-
-index.html
-index_files/
+**/__pycache__/
+*.py[cod]
+/build/
+/config.local.json
+/index.html
+/docs/index.html
+/docs/index_files/
+/docs/a100_files/
+/results/sweep-*.json
+/results/sweep-*.csv

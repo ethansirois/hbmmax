@@ -144,7 +144,7 @@ store   (A+n-1-62)[0..62]
 ```
 
 
-But when we [look at the sass](https://github.com/ethansirois/hbmmax/blob/master/k0/k0.sass), it's unfortunately quite different:
+But when we [look at the sass](../snapshots/legacy/k0/k0.sass), it's unfortunately quite different:
 ```nvsass
 // ...
 /*0070*/  LDG.E.128.CONSTANT R8, [R32.64] ;       
@@ -171,7 +171,7 @@ But when we [look at the sass](https://github.com/ethansirois/hbmmax/blob/master
 // ...      
 ```
 
-*Note:* \ This would be much worse, a serialized stream of `read 0, write 0, read 1, write 1`, if we don't have the `__restrict__` keyword. [See the SASS here](https://github.com/ethansirois/hbmmax/blob/master/k0/k0_t.sass).
+*Note:* \ This would be much worse, a serialized stream of `read 0, write 0, read 1, write 1`, if we don't have the `__restrict__` keyword. [See the SASS here](../snapshots/legacy/k0/k0_t.sass).
 
 It has the essence of what we hoped for, just only using 40 registers *total*, and only 20 for loads (5 four-register groups).
 
@@ -331,7 +331,7 @@ small_SMs(const float4* __restrict__ dA, float4* __restrict__ dB) {
 Anddddd this generates the same result, namely, requiring 32 SMs to saturate...
 
 #### Explanation
-It makes a lot of sense why this didn't improve performance when we [look at the SASS](https://github.com/ethansirois/hbmmax/blob/master/k1/k1.gist.sass).\
+It makes a lot of sense why this didn't improve performance when we [look at the SASS](../snapshots/legacy/k1/k1.gist.sass).\
 But why is the SASS the same? Why does this happen?\
 Well, it helps if we remember an age-old, cursed behavior of C array syntax.
 
@@ -377,14 +377,14 @@ I picked `GROUP_SIZE` based on the fact that: by observation, SASS memory operat
 so then we want to increment our pointer address by `0x1000000` = $2^{23}$, so then group size should be:\
 $\frac{2^{23}}{\texttt{step} \cdot 16} = \frac{2^{23}}{4 \cdot 256 \cdot 16} = 2^{23 - (2+8+4)} = 2^{23 - 14} = 2^9 = 512$
 
-*Note:* \ Even if we didn't increment the pointers, and instead used the offset `(i + j) * step + idx`, the compiler will still increment the pointers for us so that we don't have to use a constant. It generates slightly different code, you can [see here](https://github.com/ethansirois/hbmmax/blob/master/k1/k1_1_t.gist.sass).
+*Note:* \ Even if we didn't increment the pointers, and instead used the offset `(i + j) * step + idx`, the compiler will still increment the pointers for us so that we don't have to use a constant. It generates slightly different code, you can [see here](../snapshots/legacy/k1/k1_1_t.gist.sass).
 
 #### Results
 It is barely faster, not really to a point that's noticeable. We are heavily memory-bound, and I think that these few instructions don't change too much, unfortunately.
 I thought that it would since I figured that we want to keep our LSU pipeline entirely full, but perhaps it can't accept one instr/cycle, or perhaps because of how they get jammed when fetching from DRAM, it doesn't matter...
 
 This kernel also has the following problem:\
-[The SASS](https://github.com/ethansirois/hbmmax/blob/master/k1/k1_1.gist.sass) now looks like 32 loads, then 32 stores, and then it loops back. But as I mentioned above, while it's nice to burst our loads/stores because of the data bus, we would ideally like to always have outstanding loads.\
+[The SASS](../snapshots/legacy/k1/k1_1.gist.sass) now looks like 32 loads, then 32 stores, and then it loops back. But as I mentioned above, while it's nice to burst our loads/stores because of the data bus, we would ideally like to always have outstanding loads.\
 The reason is that stores are "instant" in terms of they instantly create an available register[^5].
 
 [^5]: I do have to learn more of the hardware internals though about what happens when store queues become backed-up and be able to reason about what's going on in the hardware.
@@ -456,7 +456,7 @@ The `ld.global.nc` instructions utilize the non-coherent cache. It's [not the mo
 #### Results
 This gave us a ~5% boost, which is quite nice! 
 
-But [looking at the SASS](https://github.com/ethansirois/hbmmax/blob/master/k2/k2_1.sass), we see that we're missing our offsets for our base address. It's still correct, because the base has the offset baked into it, but we would like to use our immediate offsets to save ourselves instructions (just in case).
+But [looking at the SASS](../snapshots/legacy/k2/k2_1.sass), we see that we're missing our offsets for our base address. It's still correct, because the base has the offset baked into it, but we would like to use our immediate offsets to save ourselves instructions (just in case).
 
 ### Kernel k2_1 --- immediate_offsets
 So we can bake our immedates into the PTX, but it requires it to be a compile-time constant.
@@ -465,11 +465,11 @@ So we can bake our immedates into the PTX, but it requires it to be a compile-ti
 
 *Answer:* \ No `:"(`
 
-So it unfortunately gets very messy, and we have to [write some hacky templated functions](https://github.com/ethansirois/hbmmax/blob/master/mem_ops.cuh) to overcome this.\
+So it unfortunately gets very messy, and we have to [write some hacky templated functions](../snapshots/legacy/mem_ops.cuh) to overcome this.\
 But it's really the same idea as above, with some extra effort for it to actually compile nicely.
 
 #### Results
-We can [see in the SASS](https://github.com/ethansirois/hbmmax/blob/master/k2/k2_1.sass) that we are now properly emitting instructions with the base offsets included!
+We can [see in the SASS](../snapshots/legacy/k2/k2_1.sass) that we are now properly emitting instructions with the base offsets included!
 
 Like we previously found, it doesn't do too much for us, unfortunately...
 
@@ -578,7 +578,7 @@ And we could go even simpler I believe with more bursting, or we could get more 
 So, let's get to the kernel. 
 It basically looks like the above pseudo-code in CUDA C++ and gets a little ugly to try and control scheduling. 
 
-See [here](https://github.com/ethansirois/hbmmax/blob/master/k3/k3.cu).
+See [here](../snapshots/legacy/k3/k3.cu).
 
 #### Results
 Voila! We now only need **26 SMs** to saturate the HBM! This is less than one fourth of the SMs, which is cool!
@@ -586,9 +586,9 @@ Voila! We now only need **26 SMs** to saturate the HBM! This is less than one fo
 
 #### Failed simplification
 While it was really annoying to write the kernel this way (in terms of figuring out all of the best "instruction scheduling" manually) rather than letting `ptxas` freely rearrange things, I was forced to.\
-Writing simper code [like this](TODO https://github.com/ethansirois/hbmmax/blob/master/k3/k3_t.cu) didn't have any effect, because this is pretty similar to how `ptxas` [already rearranged instructions](https://github.com/ethansirois/hbmmax/blob/master/k3-smem/k3_t.sass#L):
+Writing simper code [like this](../snapshots/legacy/k3/k3_t.cu) didn't have any effect, because this is pretty similar to how `ptxas` [already rearranged instructions](../snapshots/legacy/k3/k3_t.sass#L):
 
-However, taking this a little further to something [like this](https://github.com/ethansirois/hbmmax/blob/master/k3/k3_tt.cu) dramatically hurts our performance.
+However, taking this a little further to something [like this](../snapshots/legacy/k3/k3_tt.cu) dramatically hurts our performance.
 
 Even though all of the instructions in the loop are unrolled and all three forms are logically equivalent, so we should expect `ptxas` to clearly see that there are no dependencies that force us to issue the writes to `dB` immediately, and to thus optimally arrange the instructions.
 
@@ -597,7 +597,7 @@ Sometimes, rearranging things has no effect. Other times, it dramatically hurts 
 Either way, you can't expect `ptxas` to respect your wishes...
 
 ### Kernel k3_1 --- cache_policies
-So I was ommitting the cache policies until the very end because it [alters our code](https://github.com/ethansirois/hbmmax/blob/master/k3/k3_1.cu) and [gets messy](https://github.com/ethansirois/hbmmax/blob/master/mem_ops.cuh).
+So I was ommitting the cache policies until the very end because it [alters our code](../snapshots/legacy/k3/k3_1.cu) and [gets messy](../snapshots/legacy/mem_ops.cuh).
 
 It turns out, though, that using `asm volatile` really hurts `ptxas`'s ability to interleave things, and because inline assembly requires compile-time constants, it gets very messy.\
 The SASS just ends up getting laid-out in unoptimal ways, even though these instructions should give us a 5%-ish boost, they end up tanking our performance by ~30%, around `k0`'s performance.
@@ -636,5 +636,5 @@ On the other hand, we won't be able to detect that the constant doesn't fit into
 
 ## Methodology
 
-As you can see [here](https://github.com/ethansirois/hbmmax/blob/master/k0/k0.cu#L52) we can run a "peak" version of the kernel with many SMs, and use that to compare our kernels to.\
+As you can see [here](../snapshots/legacy/k0/k0.cu#L52) we can run a "peak" version of the kernel with many SMs, and use that to compare our kernels to.\
 This then allows us to see how close our kernel is to the peak.

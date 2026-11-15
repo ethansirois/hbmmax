@@ -1,0 +1,11 @@
+{
+  "k2/k2_1.sass": {
+    "command": [
+      "cuobjdump",
+      "--dump-sass",
+      "snapshots/legacy/k2/k2_1"
+    ],
+    "binary_sha256": "13679211c0ebae15ff42d09e0b4a80235d8ecc302906f58921ccd1b3ffb5282f",
+    "note": "Reconstructed missing article artifact from the preserved binary; no recompilation."
+  }
+}
