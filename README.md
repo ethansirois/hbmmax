@@ -82,6 +82,31 @@ The CLI prints a comparison index under `build/inspect/<settings>/README.md`. It
 `source/` links to editable code; `built-source/` links to the exact source used for inspection.
 Each assembly file includes both `small_SMs` and `large_SMs`.
 
+### Compiler Explorer / Godbolt
+
+Every build, run, and sweep point also generates `kernel.godbolt.cu`: a standalone
+copy-paste input containing the selected kernel, its settings, and required device
+helpers. Local includes are expanded; CUDA/standard-library includes stay intact.
+The host driver and large-SM baseline are omitted. The comparison index links to it
+in `godbolt/`, and `run` prints the snippet path before launching the benchmark.
+
+You can generate snippets without building or running anything, even without an
+installed CUDA toolkit:
+
+```bash
+python3 tools/bench.py snippet --kernels k0,k3_1 \
+  --sms 4 --numel "(1 << 24) + 1" -arch=sm_80 -O3
+```
+
+These files appear under `build/snippets/<settings>/`. Paste the whole file into a
+CUDA C++ editor on [Compiler Explorer](https://godbolt.org/), choose NVCC, copy the
+compiler options from its opening comment, and open the Device pane to view SASS
+or PTX. No `main()` or execution is needed. The comment records the local NVCC and
+ptxas versions when available; choose matching versions for a close comparison.
+The options include `-Xptxas=-OX` to match the local assembler optimization level.
+Compiler versions, additional flags, and the compilation context can change SASS;
+the local cubin remains the record of the code actually benchmarked.
+
 Use `--verbose` to see commands and compiler diagnostics, or `--rebuild` to bypass the cache.
 `NVCC`, `PTXAS`, and `CUOBJDUMP` environment variables (or matching CLI options) select tools.
 

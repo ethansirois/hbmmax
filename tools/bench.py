@@ -18,6 +18,7 @@ import subprocess
 import sys
 
 from collapse_sass import collapse
+from godbolt import render_snippet
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -159,20 +160,20 @@ def build(args: argparse.Namespace, kernel: Path, sms: int) -> tuple[Path, dict]
         definitions.append(f"-DHBM_MAIN_LOOPS={args.main_loops}")
     metadata = {
         "problem": args.problem, "kernel": str(kernel.relative_to(ROOT)), "tools": tools,
-        "parameters": {"arch": f"sm_{args.arch}", "opt": args.opt, "sms": sms,
-                       "peak_sms": args.peak_sms, "numel": args.numel,
-                       "threads": args.threads, "main_loops": args.main_loops},
+        "parameters": compile_parameters(args, sms),
         "definitions": definitions, "source_sha256": source_hashes(),
     }
     digest = hashlib.sha256(json.dumps(metadata, sort_keys=True).encode()).hexdigest()[:16]
     output = ROOT / "build" / f"{args.problem}.{kernel.stem}" / digest
-    required = ("bench", "kernel.ptx", "kernel.cubin", "kernel.sass", "kernel.gist.sass", "manifest.json")
+    required = ("bench", "kernel.ptx", "kernel.cubin", "kernel.sass", "kernel.gist.sass",
+                "kernel.godbolt.cu", "manifest.json")
     if all((output / name).is_file() for name in required) and not args.rebuild:
         if args.verbose:
             print(f"Cached: {output.relative_to(ROOT)}", file=sys.stderr)
         return output, json.loads((output / "manifest.json").read_text())
     output.mkdir(parents=True, exist_ok=True)
     (output / "manifest.json").unlink(missing_ok=True)
+    (output / "kernel.godbolt.cu").write_text(render_snippet(ROOT, kernel, metadata["parameters"], tools))
     common = ["-std=c++17", f"-O{args.opt}", "-I", str(ROOT), *definitions]
     commands = [
         [tools["nvcc"]["path"], *common, f"-arch=compute_{args.arch}", "-lineinfo", "-src-in-ptx",
@@ -200,6 +201,19 @@ def build(args: argparse.Namespace, kernel: Path, sms: int) -> tuple[Path, dict]
     return output, metadata
 
 
+def compile_parameters(args: argparse.Namespace, sms: int) -> dict:
+    return {"arch": f"sm_{args.arch}", "opt": args.opt, "sms": sms,
+            "peak_sms": args.peak_sms, "numel": args.numel,
+            "threads": args.threads, "main_loops": args.main_loops}
+
+
+def settings_name(settings: dict) -> str:
+    count = settings["numel"] if settings["numel"] is not None else "auto"
+    return (f"{settings['arch'].replace('sm_', 'sm')}-O{settings['opt']}"
+            f"-sms{settings['sms']}-peak{settings['peak_sms']}-n{count}"
+            f"-t{settings['threads']}-loops{settings['main_loops']}")
+
+
 def link(target: Path, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.unlink(missing_ok=True)
@@ -208,14 +222,12 @@ def link(target: Path, destination: Path) -> None:
 
 def inspect(args: argparse.Namespace, kernel: Path, output: Path, metadata: dict) -> Path:
     settings = metadata["parameters"]
-    count = settings["numel"] if settings["numel"] is not None else "auto"
-    view = ROOT / "build/inspect" / (
-        f"sm{args.arch}-O{args.opt}-sms{settings['sms']}-peak{args.peak_sms}"
-        f"-n{count}-t{args.threads}-loops{args.main_loops}")
+    view = ROOT / "build/inspect" / settings_name(settings)
     name = f"{args.problem}.{kernel.stem}"
     for directory, suffix, target in (
         ("source", ".cu", kernel),
         ("built-source", ".cu", output / "source" / kernel.relative_to(ROOT)),
+        ("godbolt", ".cu", output / "kernel.godbolt.cu"),
         ("ptx", ".ptx", output / "kernel.ptx"),
         ("sass", ".sass", output / "kernel.sass"),
         ("sass", ".gist.sass", output / "kernel.gist.sass"),
@@ -224,11 +236,12 @@ def inspect(args: argparse.Namespace, kernel: Path, output: Path, metadata: dict
         link(target, view / directory / (name + suffix))
     rows = ["# Kernel comparisons", "", "Source opens the editable file; built source records the inspected build.",
             "PTX/SASS contain small_SMs and the large_SMs baseline. The benchmark loads this exact cubin.", "",
-            "| Kernel | Source | Built source | PTX | SASS | Collapsed SASS | Build info |",
-            "| --- | --- | --- | --- | --- | --- | --- |"]
+            "| Kernel | Source | Built source | Godbolt snippet | PTX | SASS | Collapsed SASS | Build info |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- |"]
     for entry in sorted((view / "manifests").glob("*.json")):
         key = entry.stem
-        rows.append(f"| {key} | [source](source/{key}.cu) | [built](built-source/{key}.cu) | "
+        snippet = f"[snippet](godbolt/{key}.cu)" if (view / "godbolt" / f"{key}.cu").exists() else "—"
+        rows.append(f"| {key} | [source](source/{key}.cu) | [built](built-source/{key}.cu) | {snippet} | "
                     f"[PTX](ptx/{key}.ptx) | [SASS](sass/{key}.sass) | "
                     f"[collapsed](sass/{key}.gist.sass) | [manifest](manifests/{key}.json) |")
     (view / "README.md").write_text("\n".join(rows) + "\n")
@@ -317,11 +330,11 @@ def main() -> int:
     except (OSError, ValueError) as error:
         pre.error(str(error))
     parser = argparse.ArgumentParser(description=__doc__, parents=[pre])
-    parser.add_argument("action", choices=("list", "build", "run", "inspect", "sweep"))
+    parser.add_argument("action", choices=("list", "build", "run", "inspect", "sweep", "snippet"))
     parser.add_argument("--problem", default="copy")
     selection = parser.add_mutually_exclusive_group()
     selection.add_argument("--kernel", help="kernel name, e.g. k0 or k3_1")
-    selection.add_argument("--kernels", help="comma-separated names; default: all for build/inspect/sweep")
+    selection.add_argument("--kernels", help="comma-separated names; default: all for build/inspect/sweep/snippet")
     parser.add_argument("--arch", "-arch", type=architecture, default="80")
     parser.add_argument("-O", "--opt", type=int, choices=range(4), default=3)
     parser.add_argument("--sms", type=positive, default=4)
@@ -376,7 +389,17 @@ def main() -> int:
         names = (args.kernel or args.kernels or ",".join(kernels)).split(",")
         for name in names:
             if name not in kernels: raise ValueError(f"unknown kernel {name!r}; use list")
-        if args.action == "sweep":
+        if args.action == "snippet":
+            settings = compile_parameters(args, args.sms)
+            directory = ROOT / "build/snippets" / settings_name(settings)
+            directory.mkdir(parents=True, exist_ok=True)
+            tools = {name: tool_info(getattr(args, name)) for name in ("nvcc", "ptxas")
+                     if shutil.which(getattr(args, name))}
+            for name in names:
+                path = directory / f"{args.problem}.{name}.cu"
+                path.write_text(render_snippet(ROOT, kernels[name], settings, tools))
+                print(f"{name}: {path.relative_to(ROOT)}")
+        elif args.action == "sweep":
             results = []
             if args.output is None:
                 timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
@@ -398,6 +421,8 @@ def main() -> int:
                 output, metadata = build(args, kernels[name], args.sms)
                 view = inspect(args, kernels[name], output, metadata)
                 if args.action == "run":
+                    print(f"Godbolt: {(view.parent / 'godbolt' / f'{args.problem}.{name}.cu').relative_to(ROOT)}",
+                          flush=True)
                     data = measure(args, output)
                     print(f"{name}: {data['kernel_gbps']:.3f} GB/s; peak: {data['peak_gbps']:.3f} GB/s")
                 else:

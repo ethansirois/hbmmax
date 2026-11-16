@@ -1,6 +1,6 @@
 #pragma once
 
-#include "bench/config.hpp"
+#include "kernels/common/config.cuh"
 
 constexpr int MAX_REGS = 61;
 constexpr int SMEM_LEN = 20;

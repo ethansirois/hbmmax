@@ -1,6 +1,6 @@
 #pragma once
 
-#include "bench/config.hpp"
+#include "kernels/common/config.cuh"
 #ifndef HBM_NUMEL
 #define HBM_NUMEL (1 << 24)
 #endif
